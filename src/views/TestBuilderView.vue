@@ -129,6 +129,9 @@
                     <i class="fa-solid fa-arrows-left-right-to-line"></i>
                     Matching
                   </button>
+                  <button @click="addBlock('IMAGE')">
+                    <i class="fa-solid fa-image"></i> Image
+                  </button>
                 </div>
               </div>
               <div v-else class="editor-form-container">
@@ -308,8 +311,38 @@
                     </div>
                   </div>
                 </div>
-                <button @click="clearEditingState" class="btn-secondary">
-                  Done Editing
+
+                <div
+                  v-if="editingBlock.type === 'IMAGE'"
+                  class="block-editor-form"
+                >
+                  <div class="form-group">
+                    <label>Image URL</label>
+                    <input
+                      v-model="editingBlock.imageUrl"
+                      type="url"
+                      placeholder="https://your-r2-bucket.com/image.png"
+                      required
+                    />
+                    <p class="help-text">
+                      Upload the image to your cloud storage first, then paste
+                      the public URL here.
+                    </p>
+                  </div>
+                  <div class="form-group">
+                    <label>Image Caption (Optional)</label>
+                    <input
+                      v-model="editingBlock.caption"
+                      type="text"
+                      placeholder="A short description of the image"
+                    />
+                  </div>
+                </div>
+                <button
+                  @click="clearEditingState"
+                  class="btn-secondary block_done"
+                >
+                  Done
                 </button>
               </div>
             </div>
@@ -323,16 +356,6 @@
       </div>
     </div>
   </div>
-  <button
-    @click="handleSaveSection(false)"
-    class="btn-save-section"
-    :disabled="isSaving"
-  >
-    <span v-if="isSaving">
-      <i class="fa-solid fa-spinner fa-spin"></i> Saving...
-    </span>
-    <span v-else> <i class="fa-solid fa-save"></i> Save All blocks </span>
-  </button>
 </template>
 
 <script>
@@ -442,7 +465,6 @@ export default {
       }
     },
 
-    // --- THIS METHOD IS NOW CORRECT AND CONSISTENT ---
     addBlock(type) {
       if (!this.activeSection.content.blocks) {
         this.activeSection.content.blocks = [];
@@ -454,7 +476,6 @@ export default {
         answers: {},
       };
 
-      // Use your preferred name: GAP_FILLING
       if (type === "GAP_FILLING") {
         newBlock.answers = {};
       }
@@ -462,7 +483,7 @@ export default {
       if (type === "MULTIPLE_CHOICE") {
         newBlock.text = "Which is the correct answer?";
         newBlock.options = ["Option A", "Option B", "Option C"];
-        // THE FIX: The key for the answer is the block's own unique ID.
+
         newBlock.answers = { [newBlock.id]: "Option A" };
       }
 
@@ -479,9 +500,12 @@ export default {
         });
       }
 
+      if (type === "IMAGE") {
+        newBlock.imageURL = "";
+        newBlock.IMGcaption = "";
+      }
       this.activeSection.content.blocks.push(newBlock);
       this.editingBlockIndex = this.activeSection.content.blocks.length - 1;
-      // Note: We don't call debouncedSave here. The 'watch'er will handle it.
     },
     addOption() {
       if (!this.newOptionText.trim()) return;
@@ -520,72 +544,94 @@ export default {
     },
 
     renderBlockPreview(block) {
-      // First, determine if the block has any meaningful text to display, based on its type.
       let hasContent = false;
-      if (
-        block.type === "INSTRUCTION" ||
-        block.type === "GAP_FILLING" ||
-        block.type === "MULTIPLE_CHOICE"
-      ) {
-        if (block.text && block.text.trim() !== "") hasContent = true;
-      } else if (block.type === "MATCHING") {
-        if (block.instruction && block.instruction.trim() !== "")
-          hasContent = true;
+      switch (block.type) {
+        case "INSTRUCTION":
+        case "GAP_FILLING":
+        case "MULTIPLE_CHOICE":
+          // These types are considered to have content if their 'text' property is not empty.
+          if (block.text && block.text.trim() !== "") hasContent = true;
+          break;
+        case "MATCHING":
+          // A matching block has content if it has an instruction.
+          if (block.instruction && block.instruction.trim() !== "")
+            hasContent = true;
+          break;
+        case "IMAGE":
+          // An image block has content if it has a URL.
+          if (block.imageUrl && block.imageUrl.trim() !== "") hasContent = true;
+          break;
       }
 
+      //      If the block is empty, show a helpful placeholder.
       if (!hasContent) {
-        // Provide a specific placeholder for each type if it's empty.
-        if (block.type === "INSTRUCTION")
-          return '<span class="placeholder-text">Instruction (click to edit)</span>';
-        if (block.type === "GAP_FILLING")
-          return '<span class="placeholder-text">Gap-Fill Line (click to edit)</span>';
-        if (block.type === "MULTIPLE_CHOICE")
-          return '<span class="placeholder-text">Multiple Choice (click to edit)</span>';
-        if (block.type === "MATCHING")
-          return '<span class="placeholder-text">Matching (click to edit)</span>';
-        return '<span class="placeholder-text">Click to edit...</span>';
+        switch (block.type) {
+          case "INSTRUCTION":
+            return '<span class="placeholder-text">Instruction (click to edit)</span>';
+          case "GAP_FILLING":
+            return '<span class="placeholder-text">Gap-Fill Line (click to edit)</span>';
+          case "MULTIPLE_CHOICE":
+            return '<span class="placeholder-text">Multiple Choice (click to edit)</span>';
+          case "MATCHING":
+            return '<span class="placeholder-text">Matching (click to edit)</span>';
+          case "IMAGE":
+            return '<span class="placeholder-text">Image Block (click to add URL)</span>';
+          default:
+            return '<span class="placeholder-text">Click to edit...</span>';
+        }
       }
 
-      // Then, render the actual content based on type.
-      if (block.type === "INSTRUCTION")
-        return `<strong class="instruction-preview">${block.text}</strong>`;
-      if (block.type === "GAP_FILLING") {
-        return block.text.replace(
-          /\{\{([a-zA-Z0-9]+)\}\}/g,
-          '<span class="blank">_________</span>'
-        );
+      switch (block.type) {
+        case "INSTRUCTION":
+          return `<strong class="instruction-preview">${block.text}</strong>`;
+        case "GAP_FILLING":
+          return block.text.replace(
+            /\{\{([a-zA-Z0-9]+)\}\}/g,
+            '<span class="blank">_________</span>'
+          );
+        case "MULTIPLE_CHOICE":
+          // eslint-disable-next-line no-case-declarations
+          let mcHtml = `<p>${block.text}</p>`;
+          if (block.options && block.options.length > 0) {
+            mcHtml += '<ul class="preview-options-list">';
+            block.options.forEach((opt) => {
+              mcHtml += `<li>${opt}</li>`;
+            });
+            mcHtml += "</ul>";
+          }
+          return mcHtml;
+        case "MATCHING":
+          // eslint-disable-next-line no-case-declarations
+          let matchHtml = `<strong class="instruction-preview">${block.instruction}</strong>`;
+          if (block.options && block.options.length > 0) {
+            matchHtml += '<div class="preview-matching-options">';
+            block.options.forEach((opt) => {
+              matchHtml += `<span>${opt}</span>`;
+            });
+            matchHtml += "</div>";
+          }
+          if (block.itemsToMatch && block.itemsToMatch.length > 0) {
+            matchHtml += '<ul class="preview-matching-items">';
+            block.itemsToMatch.forEach((item) => {
+              matchHtml += `<li>${item.text}</li>`;
+            });
+            matchHtml += "</ul>";
+          }
+          return matchHtml;
+        case "IMAGE":
+          // eslint-disable-next-line no-case-declarations
+          let imgHtml = `<figure class="preview-image-container">`;
+          imgHtml += `<img src="${block.imageUrl}" alt="Test Image Preview" />`;
+          if (block.caption) {
+            imgHtml += `<figcaption>${block.caption}</figcaption>`;
+          }
+          imgHtml += `</figure>`;
+          return imgHtml;
       }
-      if (block.type === "MULTIPLE_CHOICE") {
-        let html = `<p>${block.text}</p>`;
-        if (block.options && block.options.length > 0) {
-          html += '<ul class="preview-options-list">';
-          block.options.forEach((opt) => {
-            html += `<li>${opt}</li>`;
-          });
-          html += "</ul>";
-        }
-        return html;
-      }
-      if (block.type === "MATCHING") {
-        let html = `<strong class="instruction-preview">${block.instruction}</strong>`;
-        if (block.options && block.options.length > 0) {
-          html += '<div class="preview-matching-options">';
-          block.options.forEach((opt) => {
-            html += `<span>${opt}</span>`;
-          });
-          html += "</div>";
-        }
-        if (block.itemsToMatch && block.itemsToMatch.length > 0) {
-          html += '<ul class="preview-matching-items">';
-          block.itemsToMatch.forEach((item) => {
-            html += `<li>${item.text}</li>`;
-          });
-          html += "</ul>";
-        }
-        return html;
-      }
-      return "";
+
+      return ""; // Default fallback
     },
+
     addMatchingItem() {
       if (this.editingBlock?.type !== "MATCHING") return;
       const newItem = {
@@ -974,7 +1020,7 @@ hr {
   cursor: pointer;
 }
 .btn-secondary {
-  background-color: #6b7280;
+  background-color: #494e57;
   color: white;
   border: none;
   padding: 10px 15px;
@@ -993,6 +1039,9 @@ hr {
   border-radius: 6px;
   font-weight: 600;
   cursor: pointer;
+}
+.block_done {
+  width: 100%;
 }
 </style>
 
@@ -1036,5 +1085,22 @@ hr {
 .preview-matching-items {
   list-style-type: decimal;
   padding-left: 20px;
+}
+.preview-image-container {
+  margin: 10px 0;
+  padding: 0;
+  text-align: center;
+}
+.preview-image-container img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  border: 1px solid #e5e7eb;
+}
+.preview-image-container figcaption {
+  font-size: 13px;
+  color: #6b7280;
+  margin-top: 5px;
+  font-style: italic;
 }
 </style>

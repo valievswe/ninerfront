@@ -39,13 +39,27 @@
                 >)</span
               >
             </div>
-            <button
-              @click.stop="handleDeleteTemplate(template)"
-              class="btn-delete"
-              title="Delete Template"
-            >
-              <i class="fa-solid fa-trash"></i>
-            </button>
+            <div class="template-actions">
+              <!-- This is the new Edit button -->
+              <router-link
+                :to="{
+                  name: 'TestBuilder',
+                  params: { templateId: template.id },
+                }"
+                class="btn-edit"
+                title="Edit Template"
+              >
+                <i class="fa-solid fa-pencil"></i>
+              </router-link>
+              <!-- This is your existing Delete button -->
+              <button
+                @click.stop="handleDeleteTemplate(template)"
+                class="btn-delete"
+                title="Delete Template"
+              >
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -261,14 +275,36 @@ export default {
   color: #666;
   margin-left: 10px;
 }
+.btn-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+  color: #ffbb00;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+.btn-edit:hover {
+  background-color: #ffe6003e;
+}
+
 .btn-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background-color: transparent;
   color: #ef4444;
   border: none;
-  padding: 5px;
-  border-radius: 4px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 14px;
   transition: background-color 0.2s;
 }
 .btn-delete:hover {
