@@ -1,6 +1,11 @@
+<!-- eslint-disable no-case-declarations -->
+
 <template>
   <div class="test-builder">
-    <div v-if="!currentTemplate" class="dashboard-card create-shell-card">
+    <div
+      v-if="!templateId && !isLoading"
+      class="dashboard-card create-shell-card"
+    >
       <h1>Create New Test Template</h1>
       <p>
         First, give your test a title and description. You will add questions
@@ -31,14 +36,16 @@
       </form>
     </div>
 
+    <div v-if="isLoading" class="loading-full-page">Loading Test Editor...</div>
+
     <!-- The Main Test Editor -->
-    <div v-else class="editor-container">
+    <div v-else-if="editableTemplate" class="editor-container">
       <h1>
-        Editing: <em>{{ currentTemplate.title }}</em>
+        Editing: <em>{{ editableTemplate.title }}</em>
       </h1>
       <div class="tabs">
         <button
-          v-for="section in currentTemplate.sections"
+          v-for="section in templateSectionsForTabs"
           :key="section.id"
           @click="activeSectionType = section.type"
           :class="{ active: activeSectionType === section.type }"
@@ -93,17 +100,20 @@
                     :class="{ 'is-editing': editingBlockIndex === index }"
                     @click="selectBlockForEditing(index)"
                   >
-                    <div
-                      class="block-preview"
-                      v-html="renderBlockPreview(block)"
-                    ></div>
-                    <div class="block-actions">
-                      <button
-                        @click.stop="deleteBlock(index)"
-                        title="Delete Block"
-                      >
-                        <i class="fa-solid fa-trash"></i>
-                      </button>
+                    <div class="block-item-content">
+                      <div
+                        class="block-preview"
+                        v-html="renderBlockPreview(block)"
+                      ></div>
+
+                      <div class="block-actions">
+                        <button
+                          @click.stop="deleteBlock(index)"
+                          class="btn-delete-block"
+                        >
+                          <i class="fa-solid fa-trash"></i> Delete Block
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -111,239 +121,477 @@
             </div>
 
             <!-- Right Side: Block Palette & Editor Pane -->
-            <div class="editor-pane">
-              <div v-if="editingBlock === null" class="palette-container">
-                <h3>Question Types</h3>
-                <p>Choose a type to add to the test:</p>
-                <div class="block-palette">
-                  <button @click="addBlock('INSTRUCTION')">
-                    <i class="fa-solid fa-align-left"></i> Instruction
-                  </button>
-                  <button @click="addBlock('GAP_FILLING')">
-                    <i class="fa-solid fa-pen-ruler"></i> Gap Filling
-                  </button>
-                  <button @click="addBlock('MULTIPLE_CHOICE')">
-                    <i class="fa-solid fa-list-check"></i> Multiple Choice
-                  </button>
-                  <button @click="addBlock('MATCHING')">
-                    <i class="fa-solid fa-arrows-left-right-to-line"></i>
-                    Matching
-                  </button>
-                  <button @click="addBlock('IMAGE')">
-                    <i class="fa-solid fa-image"></i> Image
-                  </button>
-                </div>
-              </div>
-              <div v-else class="editor-form-container">
-                <h3>Editing Block</h3>
-                <div
-                  v-if="editingBlock.type === 'INSTRUCTION'"
-                  class="block-editor-form"
-                >
-                  <div class="form-group">
-                    <label>Instruction Text</label>
-                    <textarea v-model="editingBlock.text" rows="4"></textarea>
-                  </div>
-                </div>
+            <div class="editor-pane-sticky-wrapper">
+              <div class="editor-pane">
+                <div v-if="editingBlock === null" class="palette-container">
+                  <h3>Question Types</h3>
+                  <p>Choose a type to add to the test:</p>
+                  <div class="block-palette">
+                    <template
+                      v-if="
+                        ['LISTENING', 'READING'].includes(activeSection.type)
+                      "
+                    >
+                      <button @click="addBlock('INSTRUCTION')">
+                        <i class="fa-solid fa-align-left"></i> Instruction
+                      </button>
+                      <button @click="addBlock('GAP_FILLING')">
+                        <i class="fa-solid fa-pen-ruler"></i> Gap Filling
+                      </button>
+                      <button @click="addBlock('MULTIPLE_CHOICE')">
+                        <i class="fa-solid fa-list-check"></i> Multiple Choice
+                      </button>
+                      <button @click="addBlock('MATCHING')">
+                        <i class="fa-solid fa-arrows-left-right-to-line"></i>
+                        Matching
+                      </button>
+                      <button @click="addBlock('IMAGE')">
+                        <i class="fa-solid fa-image"></i> Image
+                      </button>
 
-                <div
-                  v-if="editingBlock.type === 'GAP_FILLING'"
-                  class="block-editor-form"
-                >
-                  <div class="form-group">
-                    <label>Line Text with Gaps</label>
-                    <textarea
-                      v-model="editingBlock.text"
-                      rows="4"
-                      placeholder="e.g., Name: John {{q1}}"
-                    ></textarea>
-                    <p v-pre class="help-text">
-                      Use {{ "name" }} to create gaps.
-                    </p>
+                      <button @click="addBlock('TRUE_FALSE_NOT_GIVEN')">
+                        <i class="fa-solid fa-check-double"></i> True/False/NG
+                      </button>
+
+                      <button @click="addBlock('MAP_LABELING')">
+                        <i class="fa-solid fa-map-location-dot"></i> Map
+                        Labeling
+                      </button>
+                      <button @click="addBlock('SUMMARY_COMPLETION')">
+                        <i class="fa-regular fa-rectangle-list"></i> Summary
+                        Completion
+                      </button>
+                    </template>
+                    <template v-if="activeSection.type === 'WRITING'">
+                      <button @click="addBlock('WRITING_PROMPT')">
+                        <i class="fa-solid fa-file-pen"></i> Add Writing Prompt
+                      </button>
+                      <button @click="addBlock('IMAGE')">
+                        <i class="fa-solid fa-image"></i> Image
+                      </button>
+                      <button @click="addBlock('INSTRUCTION')">
+                        <i class="fa-solid fa-align-left"></i> Instruction
+                      </button>
+                    </template>
                   </div>
-                  <div class="form-group">
-                    <label>Answers for this Line</label>
-                    <div
-                      v-if="findPlaceholders(editingBlock.text).length === 0"
-                      class="help-text"
-                    >
-                      No gaps found in the text above.
-                    </div>
-                    <div
-                      v-for="placeholder in findPlaceholders(editingBlock.text)"
-                      :key="placeholder"
-                      class="answer-input"
-                    >
-                      <label>{{ placeholder }}:</label>
-                      <input
-                        v-model="editingBlock.answers[placeholder]"
-                        type="text"
-                      />
+                </div>
+                <div v-else class="editor-form-container">
+                  <h3>Editing Block</h3>
+
+                  <!-- --Instruction -->
+                  <div
+                    v-if="editingBlock.type === 'INSTRUCTION'"
+                    class="block-editor-form"
+                  >
+                    <div class="form-group">
+                      <label>Instruction Text</label>
+                      <textarea v-model="editingBlock.text" rows="4"></textarea>
                     </div>
                   </div>
-                </div>
 
-                <div
-                  v-if="editingBlock.type === 'MULTIPLE_CHOICE'"
-                  class="block-editor-form"
-                >
-                  <div class="form-group">
-                    <label>Question Text</label>
-                    <textarea v-model="editingBlock.text" rows="3"></textarea>
-                  </div>
-                  <div class="form-group">
-                    <label>Options & Correct Answer</label>
-                    <p class="help-text">
-                      Select the correct answer by clicking the circle. Edit the
-                      text for each option.
-                    </p>
-                    <div
-                      v-for="(option, index) in editingBlock.options"
-                      :key="index"
-                      class="option-editor-item"
-                    >
-                      <input
-                        type="radio"
-                        :name="`correct_answer_${editingBlock.id}`"
-                        :value="option"
-                        v-model="editingBlock.answers[editingBlock.id]"
-                      />
-                      <input
-                        type="text"
-                        v-model="editingBlock.options[index]"
-                        class="option-input"
-                      />
-                      <button
-                        @click="deleteOption(index)"
-                        class="btn-delete-option"
-                        title="Delete Option"
+                  <!-- --gap filling  -->
+                  <div
+                    v-if="editingBlock.type === 'GAP_FILLING'"
+                    class="block-editor-form"
+                  >
+                    <div class="form-group">
+                      <label>Line Text with Gaps</label>
+                      <textarea
+                        v-model="editingBlock.text"
+                        rows="4"
+                        placeholder="e.g., Name: John {{q1}}"
+                      ></textarea>
+                      <p v-pre class="help-text">
+                        Use {{ "name" }} to create gaps.
+                      </p>
+                    </div>
+                    <div class="form-group">
+                      <label>Answers for this Line</label>
+                      <div
+                        v-if="findPlaceholders(editingBlock.text).length === 0"
+                        class="help-text"
                       >
-                        ×
+                        No gaps found in the text above.
+                      </div>
+                      <div
+                        v-for="placeholder in findPlaceholders(
+                          editingBlock.text
+                        )"
+                        :key="placeholder"
+                        class="answer-input"
+                      >
+                        <label>{{ placeholder }}:</label>
+                        <input
+                          v-model="editingBlock.answers[placeholder]"
+                          type="text"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- -- Multiple choice -->
+                  <div
+                    v-if="editingBlock.type === 'MULTIPLE_CHOICE'"
+                    class="block-editor-form"
+                  >
+                    <div class="form-group">
+                      <label>Question Text</label>
+                      <textarea v-model="editingBlock.text" rows="3"></textarea>
+                    </div>
+                    <div class="form-group">
+                      <label>Options & Correct Answer</label>
+                      <p class="help-text">
+                        Select the correct answer by clicking the circle. Edit
+                        the text for each option.
+                      </p>
+                      <div
+                        v-for="(option, index) in editingBlock.options"
+                        :key="index"
+                        class="option-editor-item"
+                      >
+                        <input
+                          type="radio"
+                          :name="`correct_answer_${editingBlock.id}`"
+                          :value="option"
+                          v-model="editingBlock.answers[editingBlock.id]"
+                        />
+                        <input
+                          type="text"
+                          v-model="editingBlock.options[index]"
+                          class="option-input"
+                        />
+                        <button
+                          @click="deleteOption(index)"
+                          class="btn-delete-option"
+                          title="Delete Option"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </div>
+                    <div class="add-option-container">
+                      <input
+                        class="addOption"
+                        type="text"
+                        v-model="newOptionText"
+                        placeholder="Type new option text..."
+                        @keyup.enter="addOption"
+                      />
+                      <button @click.prevent="addOption" class="btn-add-option">
+                        Add Option
                       </button>
                     </div>
                   </div>
-                  <div class="add-option-container">
-                    <input
-                      class="addOption"
-                      type="text"
-                      v-model="newOptionText"
-                      placeholder="Type new option text..."
-                      @keyup.enter="addOption"
-                    />
-                    <button @click.prevent="addOption" class="btn-add-option">
-                      Add Option
-                    </button>
-                  </div>
-                </div>
 
-                <!-- -- matching -->
-                <div
-                  v-if="editingBlock.type === 'MATCHING'"
-                  class="block-editor-form"
-                >
-                  <div class="form-group">
-                    <label>Instruction Text</label>
-                    <textarea
-                      v-model="editingBlock.instruction"
-                      rows="3"
-                    ></textarea>
-                  </div>
-                  <div class="form-group">
-                    <label>Items to Match (Questions)</label>
-                    <div
-                      v-for="(item, index) in editingBlock.itemsToMatch"
-                      :key="index"
-                      class="dynamic-list-item"
-                    >
-                      <input type="text" v-model="item.text" />
-                      <button
-                        @click="deleteMatchingItem(index)"
-                        class="btn-delete-item"
+                  <!-- -- matching -->
+                  <div
+                    v-if="editingBlock.type === 'MATCHING'"
+                    class="block-editor-form"
+                  >
+                    <div class="form-group">
+                      <label>Instruction Text</label>
+                      <textarea
+                        v-model="editingBlock.instruction"
+                        rows="3"
+                      ></textarea>
+                    </div>
+                    <div class="form-group">
+                      <label>Items to Match (Questions)</label>
+                      <div
+                        v-for="(item, index) in editingBlock.itemsToMatch"
+                        :key="index"
+                        class="dynamic-list-item"
                       >
-                        ×
+                        <input type="text" v-model="item.text" />
+                        <button
+                          @click="deleteMatchingItem(index)"
+                          class="btn-delete-item"
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <button
+                        @click.prevent="addMatchingItem"
+                        class="btn-add-item"
+                      >
+                        + Add Item
                       </button>
                     </div>
-                    <button
-                      @click.prevent="addMatchingItem"
-                      class="btn-add-item"
-                    >
-                      + Add Item
-                    </button>
-                  </div>
-                  <div class="form-group">
-                    <label>Options (Choices)</label>
-                    <div
-                      v-for="(option, index) in editingBlock.options"
-                      :key="index"
-                      class="dynamic-list-item"
-                    >
-                      <input
-                        type="text"
-                        v-model="editingBlock.options[index]"
-                      />
-                      <button
-                        @click="deleteMatchingOption(index)"
-                        class="btn-delete-item"
+                    <div class="form-group">
+                      <label>Options (Choices)</label>
+                      <div
+                        v-for="(option, index) in editingBlock.options"
+                        :key="index"
+                        class="dynamic-list-item"
                       >
-                        ×
+                        <input
+                          type="text"
+                          v-model="editingBlock.options[index]"
+                        />
+                        <button
+                          @click="deleteMatchingOption(index)"
+                          class="btn-delete-item"
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <button
+                        @click.prevent="addMatchingOption"
+                        class="btn-add-item"
+                      >
+                        + Add Option
                       </button>
                     </div>
-                    <button
-                      @click.prevent="addMatchingOption"
-                      class="btn-add-item"
-                    >
-                      + Add Option
-                    </button>
+                    <div class="form-group">
+                      <label>Correct Answers</label>
+                      <div
+                        v-for="item in editingBlock.itemsToMatch"
+                        :key="item.id"
+                        class="answer-input"
+                      >
+                        <label :title="item.text">{{ item.id }}:</label>
+                        <input
+                          v-model="editingBlock.answers[item.id]"
+                          type="text"
+                          placeholder="e.g., A"
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div class="form-group">
-                    <label>Correct Answers</label>
-                    <div
-                      v-for="item in editingBlock.itemsToMatch"
-                      :key="item.id"
-                      class="answer-input"
-                    >
-                      <label :title="item.text">{{ item.id }}:</label>
+
+                  <!-- -- image -->
+                  <div
+                    v-if="editingBlock.type === 'IMAGE'"
+                    class="block-editor-form"
+                  >
+                    <div class="form-group">
+                      <label>Image URL</label>
                       <input
-                        v-model="editingBlock.answers[item.id]"
+                        v-model="editingBlock.imageUrl"
+                        type="url"
+                        placeholder="https://your-r2-bucket.com/image.png"
+                        required
+                      />
+                      <p class="help-text">
+                        Upload the image to your cloud storage first, then paste
+                        the public URL here.
+                      </p>
+                    </div>
+                    <div class="form-group">
+                      <label>Image Caption (Optional)</label>
+                      <input
+                        v-model="editingBlock.caption"
                         type="text"
-                        placeholder="e.g., A"
+                        placeholder="A short description of the image"
                       />
                     </div>
                   </div>
-                </div>
 
-                <div
-                  v-if="editingBlock.type === 'IMAGE'"
-                  class="block-editor-form"
-                >
-                  <div class="form-group">
-                    <label>Image URL</label>
-                    <input
-                      v-model="editingBlock.imageUrl"
-                      type="url"
-                      placeholder="https://your-r2-bucket.com/image.png"
-                      required
-                    />
-                    <p class="help-text">
-                      Upload the image to your cloud storage first, then paste
-                      the public URL here.
-                    </p>
+                  <!-- --TRUE FALSE NOT GIVEN -->
+                  <div
+                    v-if="editingBlock.type === 'TRUE_FALSE_NOT_GIVEN'"
+                    class="block-editor-form"
+                  >
+                    <div class="form-group">
+                      <label>Instruction Text</label>
+                      <textarea
+                        v-model="editingBlock.instruction"
+                        rows="2"
+                      ></textarea>
+                    </div>
+
+                    <div class="form-group">
+                      <label>Statements & Answers</label>
+                      <div
+                        v-for="(statement, index) in editingBlock.statements"
+                        :key="statement.id"
+                        class="dynamic-list-item"
+                      >
+                        <!-- Input for the statement text -->
+                        <input
+                          type="text"
+                          v-model="statement.text"
+                          class="statement-input"
+                        />
+                        <!-- Select dropdown for the answer -->
+                        <select
+                          v-model="editingBlock.answers[statement.id]"
+                          class="answer-select"
+                        >
+                          <option>TRUE</option>
+                          <option>FALSE</option>
+                          <option>NOT_GIVEN</option>
+                        </select>
+                        <!-- Delete button -->
+                        <button
+                          @click="deleteStatement(index)"
+                          class="btn-delete-item"
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <button
+                        @click.prevent="addStatement"
+                        class="btn-add-item"
+                      >
+                        + Add Statement
+                      </button>
+                    </div>
                   </div>
-                  <div class="form-group">
-                    <label>Image Caption (Optional)</label>
-                    <input
-                      v-model="editingBlock.caption"
-                      type="text"
-                      placeholder="A short description of the image"
-                    />
+
+                  <!-- --Map labeling -->
+                  <div
+                    v-if="editingBlock.type === 'MAP_LABELING'"
+                    class="block-editor-form"
+                  >
+                    <div class="form-group">
+                      <label>Instruction Text</label>
+                      <textarea
+                        v-model="editingBlock.instruction"
+                        rows="2"
+                      ></textarea>
+                    </div>
+
+                    <div class="form-group">
+                      <label>Map/Diagram Image URL</label>
+                      <input
+                        v-model="editingBlock.imageUrl"
+                        type="url"
+                        placeholder="https://your-r2-bucket.com/map.png"
+                        required
+                      />
+                    </div>
+
+                    <div class="form-group">
+                      <label>Labels to Match (Questions)</label>
+                      <div
+                        v-for="(label, index) in editingBlock.labels"
+                        :key="label.id"
+                        class="dynamic-list-item"
+                      >
+                        <input type="text" v-model="label.text" />
+                        <button
+                          @click="deleteMapLabel(index)"
+                          class="btn-delete-item"
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <button @click.prevent="addMapLabel" class="btn-add-item">
+                        + Add Label
+                      </button>
+                    </div>
+
+                    <div class="form-group">
+                      <label>Options (Word Bank - Optional)</label>
+                      <textarea
+                        v-model="mapOptionsAsText"
+                        rows="4"
+                        placeholder="One option per line, e.g., A) Main Hall"
+                      ></textarea>
+                    </div>
+
+                    <div class="form-group">
+                      <label>Correct Answers</label>
+                      <div
+                        v-for="label in editingBlock.labels"
+                        :key="label.id"
+                        class="answer-input"
+                      >
+                        <label :title="label.text">{{ label.id }}:</label>
+                        <input
+                          v-model="editingBlock.answers[label.id]"
+                          type="text"
+                          placeholder="e.g., A"
+                        />
+                      </div>
+                    </div>
                   </div>
+
+                  <!-- / SUMMARY COMPLETION -->
+                  <div
+                    v-if="editingBlock.type === 'SUMMARY_COMPLETION'"
+                    class="block-editor-form"
+                  >
+                    <div class="form-group">
+                      <label>Instruction Text</label>
+                      <textarea
+                        v-model="editingBlock.instruction"
+                        rows="2"
+                      ></textarea>
+                    </div>
+
+                    <div class="form-group">
+                      <label>Summary Text with Gaps</label>
+                      <textarea
+                        v-model="editingBlock.text"
+                        rows="6"
+                        placeholder="The research showed that the {{q1}}..."
+                      ></textarea>
+                      <p v-pre class="help-text">Use {{...}} to create gaps.</p>
+                    </div>
+
+                    <div class="form-group">
+                      <label>Word Bank (Options - one per line)</label>
+                      <textarea
+                        v-model="summaryOptionsAsText"
+                        rows="5"
+                      ></textarea>
+                    </div>
+
+                    <div class="form-group">
+                      <label>Correct Answers</label>
+                      <div
+                        v-for="placeholder in findPlaceholders(
+                          editingBlock.text
+                        )"
+                        :key="placeholder"
+                        class="answer-input"
+                      >
+                        <label>{{ placeholder }}:</label>
+                        <input
+                          v-model="editingBlock.answers[placeholder]"
+                          type="text"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- --WRITING PROMPT  -->
+                  <div
+                    v-if="editingBlock.type === 'WRITING_PROMPT'"
+                    class="block-editor-form"
+                  >
+                    <div class="form-group">
+                      <h3>Writing Task 1</h3>
+                      <label>Task 1 Prompt</label>
+                      <textarea
+                        v-model="editingBlock.task1_prompt"
+                        rows="5"
+                      ></textarea>
+                    </div>
+                    <div class="form-group">
+                      <label>Task 1 Image URL (Optional)</label>
+                      <input v-model="editingBlock.task1_imageUrl" type="url" />
+                    </div>
+                    <hr />
+                    <div class="form-group">
+                      <h3>Writing Task 2</h3>
+                      <label>Task 2 Prompt</label>
+                      <textarea
+                        v-model="editingBlock.task2_prompt"
+                        rows="5"
+                      ></textarea>
+                    </div>
+                  </div>
+
+                  <button
+                    @click="clearEditingState"
+                    class="btn-secondary block_done"
+                  >
+                    Done
+                  </button>
                 </div>
-                <button
-                  @click="clearEditingState"
-                  class="btn-secondary block_done"
-                >
-                  Done
-                </button>
               </div>
             </div>
           </div>
@@ -361,9 +609,20 @@
 <script>
 import api from "../services/api";
 import debounce from "lodash.debounce";
+
+const correctSectionOrder = ["LISTENING", "READING", "WRITING"];
+const sortSections = (sections) => {
+  if (!sections) return [];
+  // The .sort() method sorts the array in place based on the desired order.
+  return sections.sort((a, b) => {
+    return (
+      correctSectionOrder.indexOf(a.type) - correctSectionOrder.indexOf(b.type)
+    );
+  });
+};
 export default {
   name: "TestBuilderView",
-  // 1. Declare the 'templateId' from the URL as a prop
+
   props: {
     templateId: {
       type: String,
@@ -373,7 +632,10 @@ export default {
   data() {
     return {
       newTemplate: { title: "", description: "" },
-      currentTemplate: null,
+
+      originalTemplate: null,
+      editableTemplate: null,
+
       activeSectionType: "LISTENING",
       editingBlockIndex: null,
       newOptionText: "",
@@ -383,12 +645,18 @@ export default {
     };
   },
   computed: {
+    templateSectionsForTabs() {
+      return this.originalTemplate
+        ? sortSections(this.originalTemplate.sections)
+        : [];
+    },
     activeSection() {
-      if (!this.currentTemplate) return null;
-      return this.currentTemplate.sections?.find(
+      if (!this.editableTemplate) return null;
+      return this.editableTemplate.sections?.find(
         (s) => s.type === this.activeSectionType
       );
     },
+
     editingBlock() {
       if (
         this.editingBlockIndex === null ||
@@ -396,6 +664,44 @@ export default {
       )
         return null;
       return this.activeSection.content.blocks[this.editingBlockIndex];
+    },
+    mapOptionsAsText: {
+      get() {
+        if (
+          this.editingBlock?.type === "MAP_LABELING" &&
+          this.editingBlock.options
+        ) {
+          return this.editingBlock.options.join("\n");
+        }
+        return "";
+      },
+      set(newValue) {
+        if (this.editingBlock?.type === "MAP_LABELING") {
+          this.editingBlock.options = newValue
+            .split("\n")
+            .map((opt) => opt.trim())
+            .filter((opt) => opt);
+        }
+      },
+    },
+    summaryOptionsAsText: {
+      get() {
+        if (
+          this.editingBlock?.type === "SUMMARY_COMPLETION" &&
+          this.editingBlock.options
+        ) {
+          return this.editingBlock.options.join("\n");
+        }
+        return "";
+      },
+      set(newValue) {
+        if (this.editingBlock?.type === "SUMMARY_COMPLETION") {
+          this.editingBlock.options = newValue
+            .split("\n")
+            .map((opt) => opt.trim())
+            .filter((opt) => opt);
+        }
+      },
     },
   },
   methods: {
@@ -412,13 +718,21 @@ export default {
     },
     async fetchTemplateData() {
       if (!this.templateId) {
-        this.currentTemplate = null;
+        this.originalTemplate = null;
+        this.editableTemplate = null;
         return;
       }
       this.isLoading = true;
       try {
         const response = await api.getTemplateDetails(this.templateId);
-        this.currentTemplate = response.data;
+        const fetchedTemplate = response.data;
+
+        if (fetchedTemplate.sections) {
+          fetchedTemplate.sections = sortSections(fetchedTemplate.sections);
+        }
+
+        this.originalTemplate = fetchedTemplate;
+        this.editableTemplate = JSON.parse(JSON.stringify(fetchedTemplate));
       } catch (err) {
         alert("Failed to load test template. It may have been deleted.");
         this.$router.push({ name: "TestBuilder" });
@@ -430,12 +744,15 @@ export default {
       if (!this.activeSection || this.isSaving) return;
       this.isSaving = true;
 
+      const sectionToSave = this.activeSection;
+
       const finalAnswers = {};
-      if (this.activeSection.content.blocks) {
-        for (const block of this.activeSection.content.blocks) {
+      if (sectionToSave.content.blocks) {
+        for (const block of sectionToSave.content.blocks) {
           if (
             (block.type === "GAP_FILLING" ||
-              block.type === "MULTIPLE_CHOICE") &&
+              block.type === "MULTIPLE_CHOICE" ||
+              block.type === "MATCHING") &&
             block.answers
           ) {
             Object.assign(finalAnswers, block.answers);
@@ -444,16 +761,13 @@ export default {
       }
 
       try {
-        await api.updateSection(
-          this.currentTemplate.id,
-          this.activeSection.type,
-          {
-            content: this.activeSection.content,
-            answers: finalAnswers,
-          }
-        );
+        await api.updateSection(this.editableTemplate.id, sectionToSave.type, {
+          content: sectionToSave.content,
+          answers: finalAnswers,
+        });
         if (!isAutoSave) {
-          alert(`${this.activeSection.type} section saved successfully!`);
+          alert(`${sectionToSave.type} section saved successfully!`);
+          this.fetchTemplateData();
         }
       } catch (err) {
         if (!isAutoSave) {
@@ -504,6 +818,51 @@ export default {
         newBlock.imageURL = "";
         newBlock.IMGcaption = "";
       }
+      if (type === "TRUE_FALSE_NOT_GIVEN") {
+        newBlock.instruction =
+          "Do the following statements agree with the information given?";
+
+        // Create one default statement to start with
+        const defaultStatementId = `q_${Date.now()}_1`;
+        newBlock.statements = [
+          { id: defaultStatementId, text: "The writer claims that..." },
+        ];
+
+        // Initialize the answer for the default statement
+        newBlock.answers = { [defaultStatementId]: "TRUE" };
+      }
+
+      //-- Map labeling
+      if (type === "MAP_LABELING") {
+        newBlock.instruction = "Label the map below...";
+        newBlock.imageUrl = ""; // Admin must provide this
+
+        // Create one default label to start
+        const defaultLabelId = `q_${Date.now()}_1`;
+        newBlock.labels = [{ id: defaultLabelId, text: "Location 1" }];
+
+        // Optional word bank
+        newBlock.options = ["A) Location A", "B) Location B"];
+
+        // Initialize the answer for the default label
+        newBlock.answers = { [defaultLabelId]: "" };
+      }
+      if (type === "WRITING_PROMPT") {
+        newBlock.task1_prompt = "Summarise the information...";
+        newBlock.task1_imageUrl = "";
+        newBlock.task2_prompt = "To what extent do you agree...?";
+        delete newBlock.answers;
+      }
+      if (type === "SUMMARY_COMPLETION") {
+        newBlock.instruction =
+          "Complete the summary using the list of words...";
+        newBlock.summaryText = "The main point of the article is the {{q1}}...";
+
+        newBlock.options = ["first", "second", "third", "fourth"];
+
+        newBlock.answers = { q1: "" };
+      }
+
       this.activeSection.content.blocks.push(newBlock);
       this.editingBlockIndex = this.activeSection.content.blocks.length - 1;
     },
@@ -549,21 +908,38 @@ export default {
         case "INSTRUCTION":
         case "GAP_FILLING":
         case "MULTIPLE_CHOICE":
-          // These types are considered to have content if their 'text' property is not empty.
           if (block.text && block.text.trim() !== "") hasContent = true;
           break;
         case "MATCHING":
-          // A matching block has content if it has an instruction.
-          if (block.instruction && block.instruction.trim() !== "")
+        case "TRUE_FALSE_NOT_GIVEN":
+        case "MAP_LABELING":
+          if (block.instruction && block.instruction.trim() !== "") {
             hasContent = true;
+          }
           break;
         case "IMAGE":
-          // An image block has content if it has a URL.
           if (block.imageUrl && block.imageUrl.trim() !== "") hasContent = true;
+          break;
+        case "WRITING_PROMPT":
+          // A writing prompt has content if either task prompt has text.
+          if (
+            (block.task1_prompt && block.task1_prompt.trim() !== "") ||
+            (block.task2_prompt && block.task2_prompt.trim() !== "")
+          ) {
+            hasContent = true;
+          }
+          break;
+        case "SUMMARY_COMPLETION":
+          if (
+            (block.instruction && block.instruction.trim() !== "") ||
+            (block.text && block.text.trim() !== "")
+          ) {
+            hasContent = true;
+          }
           break;
       }
 
-      //      If the block is empty, show a helpful placeholder.
+      //      If the block is empty, show placeholder.
       if (!hasContent) {
         switch (block.type) {
           case "INSTRUCTION":
@@ -576,6 +952,14 @@ export default {
             return '<span class="placeholder-text">Matching (click to edit)</span>';
           case "IMAGE":
             return '<span class="placeholder-text">Image Block (click to add URL)</span>';
+          case "TRUE_FALSE_NOT_GIVEN":
+            return '<span class="placeholder-text">True/False/NG (click to edit)</span>';
+          case "MAP_LABELING":
+            return '<span class="placeholder-text">Map/Diagram Labeling (click to edit)</span>';
+          case "WRITING_PROMPT":
+            return '<span class="placeholder-text">Writing Prompt Block (click to edit)</span>';
+          case "SUMMARY_COMPLETION":
+            return '<span class="placeholder-text">Summary Completion (click to edit)</span>';
           default:
             return '<span class="placeholder-text">Click to edit...</span>';
         }
@@ -621,12 +1005,82 @@ export default {
         case "IMAGE":
           // eslint-disable-next-line no-case-declarations
           let imgHtml = `<figure class="preview-image-container">`;
-          imgHtml += `<img src="${block.imageUrl}" alt="Test Image Preview" />`;
+          if (block.imageUrl) {
+            imgHtml += `<div class="image-preview-wrapper">`;
+            imgHtml += `<img src="${block.imageUrl}" alt="Test Image Preview" />`;
+            imgHtml += `</div>`;
+          }
           if (block.caption) {
             imgHtml += `<figcaption>${block.caption}</figcaption>`;
           }
           imgHtml += `</figure>`;
           return imgHtml;
+        case "TRUE_FALSE_NOT_GIVEN":
+          // eslint-disable-next-line no-case-declarations
+          let tfngHtml = `<strong class="instruction-preview">${block.instruction}</strong>`;
+          if (block.statements && block.statements.length > 0) {
+            tfngHtml += '<ul class="preview-statement-list">';
+            block.statements.forEach((stmt) => {
+              tfngHtml += `<li>${stmt.text}</li>`;
+            });
+            tfngHtml += "</ul>";
+          }
+          return tfngHtml;
+        case "MAP_LABELING":
+          // eslint-disable-next-line no-case-declarations
+          let mapHtml = `<strong class="instruction-preview">${block.instruction}</strong>`;
+          if (block.imageUrl) {
+            mapHtml += `<div class="image-preview-wrapper">`;
+            mapHtml += `<img src="${block.imageUrl}" alt="Map Preview" />`;
+            mapHtml += `</div>`;
+          } else {
+            mapHtml += `<div class="preview-no-image">No Image URL Provided</div>`;
+          }
+          if (block.labels && block.labels.length > 0) {
+            mapHtml += '<ul class="preview-statement-list">';
+            block.labels.forEach((label) => {
+              mapHtml += `<li>${label.text}</li>`;
+            });
+            mapHtml += "</ul>";
+          }
+          return mapHtml;
+        case "WRITING_PROMPT":
+          // eslint-disable-next-line no-case-declarations
+          let writingHtml = '<div class="writing-preview">';
+          if (block.task1_prompt) {
+            writingHtml += `<div><strong>Task 1:</strong><p>${block.task1_prompt}</p></div>`;
+          }
+
+          if (block.task1_imageUrl) {
+            writingHtml += `<div class="image-preview-wrapper">`;
+            writingHtml += `<img src="${block.task1_imageUrl}" alt="Task 1 Image Preview" />`;
+            writingHtml += `</div>`;
+          }
+
+          if (block.task2_prompt) {
+            writingHtml += `<div style="margin-top: 15px;"><strong>Task 2:</strong><p>${block.task2_prompt}</p></div>`;
+          }
+          writingHtml += "</div>";
+          return writingHtml;
+
+        case "SUMMARY_COMPLETION":
+          // eslint-disable-next-line no-case-declarations
+          let summaryHtml = "";
+          if (block.instruction) {
+            summaryHtml += `<strong class="instruction-preview">${block.instruction}</strong>`;
+          }
+          if (block.options && block.options.length > 0) {
+            summaryHtml += '<div class="preview-word-bank">';
+            summaryHtml += block.options.join("   |   ");
+            summaryHtml += "</div>";
+          }
+          if (block.text) {
+            summaryHtml += `<p class="summary-text-preview">${block.text.replace(
+              /\{\{([a-zA-Z0-9]+)\}\}/g,
+              '<span class="blank">_________</span>'
+            )}</p>`;
+          }
+          return summaryHtml;
       }
 
       return ""; // Default fallback
@@ -671,24 +1125,73 @@ export default {
       };
       return icons[type] || "fa-solid fa-question-circle";
     },
+
+    //-- TRUE FALSE NOT GIVEN
+    addStatement() {
+      if (this.editingBlock?.type !== "TRUE_FALSE_NOT_GIVEN") return;
+
+      const newStatement = {
+        id: `q_${Date.now()}_st${this.editingBlock.statements.length + 1}`,
+        text: "New statement...",
+      };
+
+      if (!Array.isArray(this.editingBlock.statements)) {
+        this.editingBlock.statements = [];
+      }
+
+      this.editingBlock.statements.push(newStatement);
+      // Initialize its answer
+      this.editingBlock.answers[newStatement.id] = "TRUE";
+    },
+    deleteStatement(index) {
+      if (this.editingBlock?.type !== "TRUE_FALSE_NOT_GIVEN") return;
+
+      const statementToDelete = this.editingBlock.statements[index];
+      // Delete the associated answer first
+      delete this.editingBlock.answers[statementToDelete.id];
+      // Then delete the statement from the array
+      this.editingBlock.statements.splice(index, 1);
+    },
+
+    //-- MAP LABELING
+    addMapLabel() {
+      if (this.editingBlock?.type !== "MAP_LABELING") return;
+
+      const newLabel = {
+        id: `q_${Date.now()}_lbl${this.editingBlock.labels.length + 1}`,
+        text: "New Label",
+      };
+
+      if (!Array.isArray(this.editingBlock.labels)) {
+        this.editingBlock.labels = [];
+      }
+
+      this.editingBlock.labels.push(newLabel);
+      // Initialize its answer
+      this.editingBlock.answers[newLabel.id] = "";
+    },
+    deleteMapLabel(index) {
+      if (this.editingBlock?.type !== "MAP_LABELING") return;
+
+      const labelToDelete = this.editingBlock.labels[index];
+      // Delete the associated answer first
+      delete this.editingBlock.answers[labelToDelete.id];
+      // Then delete the label from the array
+      this.editingBlock.labels.splice(index, 1);
+    },
   },
   created() {
     this.fetchTemplateData();
-    // Initialize the debounced save function when the component is created
-    this.debouncedSave = debounce(
-      (isAutoSave) => this.handleSaveSection(isAutoSave),
-      1000
-    ); // 1 second delay
+    this.debouncedSave = debounce(() => this.handleSaveSection(true), 1500);
   },
   watch: {
-    activeSection: {
+    editableTemplate: {
       handler(newValue, oldValue) {
-        // We only trigger auto-save if the component is loaded and not in its initial state
-        if (oldValue && this.currentTemplate) {
-          this.debouncedSave(true);
+        if (oldValue && this.editableTemplate) {
+          this.debouncedSave();
         }
       },
-      deep: true, // 'deep' tells Vue to watch for changes inside nested objects and arrays
+      deep: true,
     },
     templateId() {
       this.fetchTemplateData();
@@ -779,6 +1282,19 @@ hr {
   display: grid;
   grid-template-columns: 1.2fr 1fr;
   gap: 30px;
+
+  align-items: start;
+}
+
+.preview-pane {
+  max-height: 80vh;
+  overflow-y: auto;
+
+  padding-right: 15px;
+}
+.editor-pane-sticky-wrapper {
+  position: sticky;
+  top: 20px;
 }
 
 /* Left Side: Preview Pane */
@@ -807,16 +1323,14 @@ hr {
   display: block;
 }
 .block-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px;
+  padding: 0px;
   border: 1px solid #e5e7eb;
   border-radius: 6px;
-  margin-bottom: 8px;
+  margin-bottom: 15px;
   cursor: pointer;
   transition: all 0.2s ease;
   background-color: #fff;
+  overflow: hidden;
 }
 .block-item:hover {
   border-color: #9ca3af;
@@ -826,10 +1340,46 @@ hr {
   box-shadow: 0 0 0 3px rgba(18, 35, 61, 0.4);
   background-color: #eff6ff;
 }
-.block-actions {
-  opacity: 0;
-  transition: opacity 0.2s ease;
+.block-item-content {
+  display: flex;
+  flex-direction: column;
 }
+
+.block-preview {
+  padding: 15px;
+  flex-grow: 1;
+}
+.block-actions {
+  display: flex;
+  padding: 0;
+  background-color: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+}
+
+.btn-delete-block {
+  flex-grow: 1;
+  width: 200px;
+
+  background-color: transparent;
+  color: #ef4444;
+  border: none;
+  padding: 18px 25px;
+  border-radius: 0;
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 500;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+.btn-delete-block:hover {
+  background-color: #ef4444;
+  color: white;
+}
+
 .block-item:hover .block-actions,
 .block-item.is-editing .block-actions {
   opacity: 1;
@@ -1043,10 +1593,34 @@ hr {
 .block_done {
   width: 100%;
 }
+.statement-input {
+  flex-grow: 1;
+}
+.answer-select {
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background-color: white;
+}
+
+/* -- map labeling style */
+.preview-map-image {
+  max-width: 100%;
+  border-radius: 4px;
+  border: 1px solid #e5e7eb;
+  margin: 10px 0;
+}
+.preview-no-image {
+  border: 1px dashed #ccc;
+  padding: 30px;
+  text-align: center;
+  color: #999;
+  border-radius: 4px;
+  margin: 10px 0;
+}
 </style>
 
 <style>
-/* Global styles are needed for v-html to correctly style the preview */
 .block-preview strong {
   font-style: italic;
   display: block;
@@ -1102,5 +1676,43 @@ hr {
   color: #6b7280;
   margin-top: 5px;
   font-style: italic;
+}
+.preview-statement-list {
+  list-style-type: decimal;
+  padding-left: 20px;
+  margin-top: 10px;
+}
+.image-preview-wrapper {
+  width: 100%;
+
+  max-height: 350px;
+  background-color: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  margin: 10px 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+.image-preview-wrapper img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.preview-word-bank {
+  background-color: #f9fafb;
+  border: 1px solid #e5e7eb;
+  padding: 10px 15px;
+  margin: 10px 0;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 14px;
+  color: #374151;
+}
+.summary-text-preview {
+  white-space: pre-wrap;
+  line-height: 1.8;
 }
 </style>

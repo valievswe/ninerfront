@@ -284,7 +284,7 @@ export default {
   border: none;
   width: 32px;
   height: 32px;
-  border-radius: 50%;
+  border-radius: 5px;
   cursor: pointer;
   font-size: 14px;
   transition: background-color 0.2s;
@@ -302,7 +302,7 @@ export default {
   border: none;
   width: 32px;
   height: 32px;
-  border-radius: 50%;
+  border-radius: 5px;
   cursor: pointer;
   font-size: 14px;
   transition: background-color 0.2s;
