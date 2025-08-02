@@ -1,8 +1,9 @@
-<!-- eslint-disable no-unused-vars -->
-<!-- eslint-disable no-unused-vars -->
 <template>
   <div class="test-room-view">
     <h1>IELTS Mock Test</h1>
+    <div v-if="testDuration > 0" class="timer">
+      Time Left: {{ formattedTimeLeft }}
+    </div>
     <div v-if="isLoading">Loading test content...</div>
     <div v-else>
       <!-- Loop through each section (Listening, Reading, Writing) -->

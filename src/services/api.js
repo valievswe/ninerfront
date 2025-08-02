@@ -40,9 +40,7 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    // If we ever get a 401 Unauthorized from the server, it means our token is
-    // definitively bad (e.g., server restarted, secret changed, etc.).
-    // We should force a logout.
+    //logout unauthorized
     if (error.response && error.response.status === 401) {
       console.error("Received 401 Unauthorized. Forcing logout.");
       store.logout();
@@ -105,19 +103,27 @@ export default {
     return apiClient.get("/admin/tests/scheduled");
   },
 
-  // -- Test Taking (User) --
+  // -- user test room
   getAvailableTests() {
     return apiClient.get("/tests/available");
   },
+
   startTestAttempt(scheduledTestId) {
     return apiClient.post(`/tests/${scheduledTestId}/start`);
   },
-  getTestSections(templateId) {
-    return apiClient.get(`/tests/templates/${templateId}/sections`);
+
+  getSectionContent(attemptId, sectionType) {
+    return apiClient.get(`/tests/attempts/${attemptId}/section/${sectionType}`);
   },
-  submitTestAttempt(attemptId, userAnswers) {
-    return apiClient.post(`/tests/attempts/${attemptId}/submit`, {
-      userAnswers,
+
+  submitSectionAnswers(attemptId, sectionType, answers) {
+    return apiClient.post(`/tests/attempts/${attemptId}/submit-section`, {
+      sectionType,
+      answers,
     });
+  },
+
+  finishTestAttempt(attemptId) {
+    return apiClient.post(`/tests/attempts/${attemptId}/finish`);
   },
 };

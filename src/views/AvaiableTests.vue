@@ -33,24 +33,36 @@ export default {
         const response = await api.getAvailableTests();
         this.availableTests = response.data;
       } catch (err) {
-        alert("Could not fetch available tests.");
+        if (err.response?.status !== 403) {
+          alert("Could not fetch available tests.");
+        }
         console.error(err);
       } finally {
         this.isLoading = false;
       }
     },
+
+    // -- / UPDATED METHOD ---
     async startTest(test) {
+      // Ask for confirmation before starting
+      if (
+        !confirm(
+          `Are you sure you want to start the test: "${test.testTemplate.title}"? Once started, the timer will begin.`
+        )
+      ) {
+        return;
+      }
+
       try {
+        // 1. Call the API to create the TestAttempt record in the database
         const response = await api.startTestAttempt(test.id);
         const attemptId = response.data.id;
-        const templateId = test.testTemplate.id;
-        // Navigate to the test room with the new attempt ID
-        this.$router.push({
-          name: "TestRoom",
-          params: { templateId, attemptId },
-        });
+
+        this.$router.push({ name: "ListeningSection", params: { attemptId } });
       } catch (err) {
-        alert("Failed to start test. You may have already started it.");
+        alert(
+          "Failed to start the test. You may have already started this attempt."
+        );
         console.error(err);
       }
     },
