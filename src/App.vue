@@ -23,6 +23,10 @@
           <router-link to="/admin/tests/builder" class="nav-item"
             >Test Builder</router-link
           >
+
+          <router-link v-if="isAdmin" to="/admin/attempts" class="nav-item"
+            >View Results</router-link
+          >
         </template>
       </div>
 
@@ -145,7 +149,7 @@ body {
 
 /* --- Main Content Area --- */
 .main-content {
-  max-width: 1200px;
+  max-width: 1700px;
   margin: 30px auto;
   padding: 0 20px;
 }

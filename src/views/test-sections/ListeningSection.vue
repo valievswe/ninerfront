@@ -81,6 +81,7 @@ export default {
           "LISTENING"
         );
         this.sectionData = response.data;
+        console.log("Data received by TestRoom:", response.data);
       } catch (err) {
         alert(
           "Could not load the Listening section. You may not have permission, or the test has ended."
@@ -166,7 +167,7 @@ export default {
 
 <style scoped>
 .section-view {
-  max-width: 900px;
+  max-width: 90%;
   margin: 20px auto;
 }
 .section-header {

@@ -7,7 +7,10 @@
 
     <!-- GAP_FILLING Block -->
     <div v-else-if="block.type === 'GAP_FILLING'" class="gap-filling-block">
-      <div class="gap-template" v-html="renderGapTemplate"></div>
+      <GappFilling
+        :template-string="block.text"
+        @answer-update="$emit('answer-update', $event)"
+      />
     </div>
 
     <!-- MULTIPLE_CHOICE Block -->
@@ -43,13 +46,14 @@
         <div class="items-to-match-column">
           <h4>Questions</h4>
           <div
-            v-for="statement in block.statements"
-            :key="statement.id"
-            class="statement-item"
+            v-for="item in block.itemsToMatch"
+            :key="item.id"
+            class="item-to-match"
           >
             <label :for="`match_q_${item.id}`">{{ item.text }}</label>
             <input
               type="text"
+              class="answer-input-field"
               :id="`match_q_${item.id}`"
               :name="`match_q_${item.id}`"
               @input="updateAnswer(item.id, $event.target.value)"
@@ -80,32 +84,15 @@
         <p class="statement-text">
           <strong>{{ index + 1 }}.</strong> {{ statement.text }}
         </p>
-        <div class="tfng-options">
-          <input
-            type="radio"
-            :id="`tfng_q_${statement.id}_true`"
-            :name="`tfng_q_${statement.id}`"
-            value="TRUE"
-            @change="updateAnswer(statement.id, 'TRUE')"
-          />
-          <label :for="`tfng_q_${statement.id}_true`">True</label>
-          <input
-            type="radio"
-            :id="`tfng_q_${statement.id}_false`"
-            :name="`tfng_q_${statement.id}`"
-            value="FALSE"
-            @change="updateAnswer(statement.id, 'FALSE')"
-          />
-          <label :for="`tfng_q_${statement.id}_false`">False</label>
-          <input
-            type="radio"
-            :id="`tfng_q_${statement.id}_notgiven`"
-            :name="`tfng_q_${statement.id}`"
-            value="NOT_GIVEN"
-            @change="updateAnswer(statement.id, 'NOT_GIVEN')"
-          />
-          <label :for="`tfng_q_${statement.id}_notgiven`">Not Given</label>
-        </div>
+        <select
+          class="answer-select"
+          @change="updateAnswer(statement.id, $event.target.value)"
+        >
+          <option value="" disabled selected>Select...</option>
+          <option value="TRUE">True</option>
+          <option value="FALSE">False</option>
+          <option value="NOT_GIVEN">Not Given</option>
+        </select>
       </div>
     </div>
 
@@ -152,87 +139,32 @@
           alt="Writing Task 1 Image"
           class="display-image"
         />
-        <textarea
-          :value="userAnswers.WRITING.task1"
-          @input="updateWritingAnswer('task1', $event.target.value)"
-          placeholder="Write your Task 1 answer here..."
-        ></textarea>
       </div>
       <div class="task-container">
         <h4>Writing Task 2</h4>
         <p class="prompt-text">{{ block.task2_prompt }}</p>
-        <textarea
-          :value="userAnswers.WRITING.task2"
-          @input="updateWritingAnswer('task2', $event.target.value)"
-          placeholder="Write your Task 2 answer here..."
-        ></textarea>
       </div>
     </div>
   </div>
 </template>
 
 <script>
+import GappFilling from "./GappFilling.vue";
 export default {
   name: "BlockRenderer",
+  components: { GappFilling },
   props: {
     block: { type: Object, required: true },
-    // We pass the userAnswers from the parent to pre-fill inputs if needed
-    // This is optional and can be used for resuming tests. For now, it's read-only.
-    userAnswers: {
-      type: Object,
-      default: () => ({
-        LISTENING: {},
-        READING: {},
-        WRITING: { task1: "", task2: "" },
-      }),
-    },
+    userAnswers: { type: Object, default: () => ({}) },
   },
-  emits: ["answer-update"], // Custom event to send answers back to parent
-  computed: {
-    renderGapTemplate() {
-      if (!this.block.template) return "";
-      // This will replace {{placeholder}} with an input field
-      // We use a custom event listener on mounted to capture input values
-      return this.block.template
-        .replace(/\{\{([a-zA-Z0-9]+)\}\}/g, (match, placeholderId) => {
-          // Pre-fill input if answer already exists
-          const currentAnswer =
-            this.userAnswers[
-              this.block.type === "GAP_FILLING" ? "LISTENING" : "READING"
-            ][placeholderId] || "";
-          return `<input type="text" class="gap-input" data-question-id="${placeholderId}" value="${currentAnswer}" />`;
-        })
-        .replace(/\n/g, "<br>");
-    },
-  },
+  emits: ["answer-update"],
   methods: {
     updateAnswer(questionId, answer) {
-      // Emit the answer update to the parent component
-      this.$emit("answer-update", {
-        questionId,
-        answer,
-      });
+      this.$emit("answer-update", { questionId, answer });
     },
     updateWritingAnswer(taskType, answer) {
-      // Special handling for Writing section answers
-      this.$emit("answer-update", {
-        blockId: this.block.id,
-        questionId: taskType,
-        answer,
-      });
+      this.$emit("answer-update", { questionId: taskType, answer });
     },
-  },
-  mounted() {
-    // Event listener for dynamically created inputs (like gap-fills)
-    if (this.block.type === "GAP_FILLING") {
-      this.$el.addEventListener("input", (event) => {
-        if (event.target.classList.contains("gap-input")) {
-          const questionId = event.target.dataset.questionId;
-          const answer = event.target.value;
-          this.updateAnswer(questionId, answer);
-        }
-      });
-    }
   },
 };
 </script>
@@ -261,6 +193,16 @@ export default {
   font-weight: bold;
   padding: 5px;
   margin: 0 5px;
+}
+.answer-input-field {
+  width: 100%;
+}
+
+.answer-select {
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background-color: white;
 }
 
 .multiple-choice-block .question-text,

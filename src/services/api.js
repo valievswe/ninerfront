@@ -103,6 +103,13 @@ export default {
     return apiClient.get("/admin/tests/scheduled");
   },
 
+  getAllAttempts() {
+    return apiClient.get("/admin/attempts");
+  },
+
+  getAttemptDetails(attemptId) {
+    return apiClient.get(`/admin/attempts/${attemptId}`);
+  },
   // -- user test room
   getAvailableTests() {
     return apiClient.get("/tests/available");

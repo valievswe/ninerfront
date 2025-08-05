@@ -9,24 +9,28 @@
 
     <div v-if="isLoading" class="loading-container">Loading Section...</div>
 
-    <div v-else-if="sectionData" class="test-content">
-      <!-- Unlike Listening, the Reading content is shown immediately -->
-      <div v-if="sectionData.content.passageText" class="reading-passage">
-        <h3>Reading Passage</h3>
-        <!-- Use v-html to render the passage with line breaks -->
-        <p v-html="formattedPassageText"></p>
+    <div v-else-if="sectionData" class="split-view-container">
+      <!-- Left Side: Reading Passage -->
+      <div class="passage-pane">
+        <div v-if="sectionData.content.passageText" class="reading-passage">
+          <h3>Reading Passage</h3>
+          <p v-html="formattedPassageText"></p>
+        </div>
       </div>
 
-      <BlockRenderer
-        v-for="block in sectionData.content.blocks"
-        :key="block.id"
-        :block="block"
-        @answer-update="updateUserAnswer"
-      />
-
-      <button @click="confirmAndSubmit" class="btn-primary submit-btn">
-        Submit Reading Section and Continue to Writing
-      </button>
+      <!-- Right Side: Questions -->
+      <div class="questions-pane">
+        <h3>Questions</h3>
+        <BlockRenderer
+          v-for="block in sectionData.content.blocks"
+          :key="block.id"
+          :block="block"
+          @answer-update="updateUserAnswer"
+        />
+        <button @click="confirmAndSubmit" class="btn-primary submit-btn">
+          Submit Reading & Continue
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -124,7 +128,7 @@ export default {
 <style scoped>
 /* Scoped styles from ListeningView.vue are good here, plus some specifics */
 .section-view {
-  max-width: 900px;
+  max-width: 90%;
   margin: 20px auto;
 }
 .section-header {
@@ -162,7 +166,37 @@ export default {
   margin-top: 0;
   color: #111827;
 }
+.split-view-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* Two equal columns */
+  gap: 30px;
+  height: calc(100vh - 150px); /* Full viewport height minus header/padding */
+}
+
+.passage-pane,
+.questions-pane {
+  background-color: #fff;
+  padding: 25px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+
+  overflow-y: auto;
+}
+
+.passage-pane h3,
+.questions-pane h3 {
+  margin-top: 0;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+
+.reading-passage {
+  line-height: 1.7;
+  font-size: 1.05em;
+}
+
 .submit-btn {
   margin-top: 20px;
+  width: 100%;
 }
 </style>

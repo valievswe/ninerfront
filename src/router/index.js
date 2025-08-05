@@ -6,6 +6,8 @@ import Admin from "../views/Admin-page.vue";
 import TestAdminView from "../views/TestAdminView.vue";
 import AvaiableTests from "@/views/AvaiableTests.vue";
 import TestBuilderView from "@/views/TestBuilderView.vue";
+import AttemptsListView from "../views/testresults/AttemptsListView.vue";
+import AttemptDetailView from "../views/testresults/AttemptDetailView.vue";
 import { store } from "../store/store.js";
 
 // / test room
@@ -63,7 +65,7 @@ const routes = [
     path: "/tests",
     name: "AvailableTests",
     component: AvaiableTests,
-    meta: { requiresAuth: true, requiresUser: true }, // Let's make this specific to the USER role
+    meta: { requiresAuth: true, requiresUser: true },
   },
 
   {
@@ -85,6 +87,20 @@ const routes = [
     name: "WritingSection",
     component: WritingSection,
     meta: { requiresAuth: true, requiresUser: true },
+    props: true,
+  },
+
+  {
+    path: "/admin/attempts",
+    name: "AttemptsList",
+    component: AttemptsListView,
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
+  {
+    path: "/admin/attempts/:attemptId",
+    name: "AttemptDetail",
+    component: AttemptDetailView,
+    meta: { requiresAuth: true, requiresAdmin: true },
     props: true,
   },
   // Redirect root to login for simplicity

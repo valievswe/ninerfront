@@ -121,7 +121,9 @@ export default {
       this.isLoading = true;
       try {
         const response = await api.getTestSections(this.templateId);
-        // Ensure sections are sorted correctly (Listening, Reading, Writing)
+
+        console.log("Data received by TestRoom:", response.data);
+
         const correctSectionOrder = ["LISTENING", "READING", "WRITING"];
         this.sections = response.data.sort((a, b) => {
           return (

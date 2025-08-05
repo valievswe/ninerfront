@@ -223,6 +223,10 @@ export default {
 </script>
 
 <style scoped>
+.test-admin-view {
+  max-width: 1200px;
+  margin: 20px auto;
+}
 .test-admin-view h1 {
   margin-bottom: 30px;
 }
