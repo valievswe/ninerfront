@@ -88,7 +88,7 @@ export default {
     );
   },
 
-  // --- THE FUNCTIONS ---
+  // --- THE ADMIN ROUTES---
   // For the main Test Management Dashboard
   getAllTestTemplates() {
     return apiClient.get("/admin/tests/templates");
@@ -109,6 +109,9 @@ export default {
 
   getAttemptDetails(attemptId) {
     return apiClient.get(`/admin/attempts/${attemptId}`);
+  },
+  getDashboardStats() {
+    return apiClient.get("/admin/stats");
   },
   // -- user test room
   getAvailableTests() {

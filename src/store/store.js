@@ -1,7 +1,7 @@
 // src/store/index.js
 import { reactive } from "vue";
 import { jwtDecode } from "jwt-decode";
-import router from "../router"; // Import the router to redirect
+import router from "../router"; // Import
 
 export const store = reactive({
   user: null,
