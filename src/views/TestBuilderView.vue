@@ -983,7 +983,7 @@ export default {
             });
             mcHtml += "</ul>";
           }
-          return mcHtml;
+          return `<div class="gap-fill-preview">${mcHtml}</div>`;
         case "MATCHING":
           // eslint-disable-next-line no-case-declarations
           let matchHtml = `<strong class="instruction-preview">${block.instruction}</strong>`;
@@ -1305,6 +1305,10 @@ hr {
   border-bottom: 1px solid #e5e7eb;
   padding-bottom: 10px;
   margin-top: 0;
+}
+.gap-fill-preview {
+  white-space: pre-wrap;
+  line-height: 1.6;
 }
 .block-list-wrapper {
   min-height: 400px;

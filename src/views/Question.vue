@@ -42,8 +42,6 @@
         "
       />
     </div>
-
-    <!-- Add other question type renderers here (e.g., TRUE_FALSE_NOT_GIVEN) -->
   </div>
 </template>
 

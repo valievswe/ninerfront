@@ -125,12 +125,12 @@
       </div>
     </div>
 
-    <!-- WRITING_PROMPT Block -->
     <div
       v-else-if="block.type === 'WRITING_PROMPT'"
       class="writing-prompt-block"
     >
-      <div class="task-container">
+      <!-- Task 1 Container -->
+      <div class="task-container" v-if="block.task1_prompt">
         <h4>Writing Task 1</h4>
         <p class="prompt-text">{{ block.task1_prompt }}</p>
         <img
@@ -139,10 +139,24 @@
           alt="Writing Task 1 Image"
           class="display-image"
         />
+        <textarea
+          class="writing-textarea"
+          placeholder="Type your response for Task 1 here..."
+          :value="userAnswers.WRITING.task1"
+          @input="updateWritingAnswer('task1', $event.target.value)"
+        ></textarea>
       </div>
-      <div class="task-container">
+
+      <!-- Task 2 Container -->
+      <div class="task-container" v-if="block.task2_prompt">
         <h4>Writing Task 2</h4>
         <p class="prompt-text">{{ block.task2_prompt }}</p>
+        <textarea
+          class="writing-textarea"
+          placeholder="Type your response for Task 2 here..."
+          :value="userAnswers.WRITING.task2"
+          @input="updateWritingAnswer('task2', $event.target.value)"
+        ></textarea>
       </div>
     </div>
   </div>
@@ -155,7 +169,7 @@ export default {
   components: { GappFilling },
   props: {
     block: { type: Object, required: true },
-    userAnswers: { type: Object, default: () => ({}) },
+    userAnswers: { type: Object, required: true },
   },
   emits: ["answer-update"],
   methods: {
@@ -181,50 +195,31 @@ export default {
   font-style: italic;
   margin-bottom: 15px;
 }
-.gap-filling-block .gap-template {
-  line-height: 2;
-  white-space: pre-wrap; /* Preserve line breaks from textarea input */
-}
-.gap-input {
-  border: none;
-  border-bottom: 1px solid #333;
-  text-align: center;
-  width: 150px;
-  font-weight: bold;
-  padding: 5px;
-  margin: 0 5px;
-}
 .answer-input-field {
   width: 100%;
 }
-
 .answer-select {
   padding: 8px;
   border-radius: 4px;
   border: 1px solid #ccc;
   background-color: white;
 }
-
 .multiple-choice-block .question-text,
 .tfng-block .statement-text {
   font-size: 1.05em;
   margin-bottom: 10px;
 }
-.options-container,
-.tfng-options {
+.options-container {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.options-container .option,
-.tfng-options div {
+.options-container .option {
   display: flex;
   align-items: center;
   gap: 10px;
 }
-input[type="radio"],
-input[type="checkbox"] {
-  /* Standardizing radio/checkbox appearance */
+input[type="radio"] {
   width: 1.2em;
   height: 1.2em;
   margin: 0;
@@ -235,7 +230,6 @@ input[type="text"] {
   border: 1px solid #ccc;
   border-radius: 4px;
 }
-
 .matching-block,
 .map-labeling-block {
   margin-top: 20px;
@@ -257,7 +251,6 @@ input[type="text"] {
 .matching-grid .item-to-match input {
   width: 100%;
 }
-
 .image-block .display-image,
 .writing-prompt-block .display-image {
   max-width: 100%;
@@ -271,7 +264,6 @@ input[type="text"] {
   color: #666;
   font-size: 0.9em;
 }
-
 .writing-prompt-block h4 {
   margin-top: 20px;
   margin-bottom: 10px;
@@ -281,24 +273,19 @@ input[type="text"] {
   line-height: 1.6;
   margin-bottom: 15px;
 }
-.writing-prompt-block textarea {
+.writing-prompt-block .writing-textarea {
   width: 100%;
-  min-height: 150px;
+  min-height: 200px;
   padding: 10px;
   border: 1px solid #ccc;
   border-radius: 4px;
   box-sizing: border-box;
+  resize: vertical;
 }
-
-/* Specific styles for TFNG radios */
 .tfng-options {
-  flex-direction: row; /* Make radios horizontal */
+  flex-direction: row;
   gap: 20px;
   margin-top: 10px;
-}
-.tfng-options label {
-  font-weight: normal;
-  cursor: pointer;
 }
 .map-labeling-block .display-map-image {
   max-width: 100%;

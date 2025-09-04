@@ -103,8 +103,11 @@ export default {
           this.$router.push("/login");
         }, 1500);
       } catch (err) {
-        this.error =
-          "Registration failed. Email, username, or Personal ID may already be taken.";
+        if (err.response && err.response.data && err.response.data.error) {
+          this.error = err.response.data.error;
+        } else {
+          this.error = "An unexpected error occurred. Please try again.";
+        }
         console.error(err);
       }
     },

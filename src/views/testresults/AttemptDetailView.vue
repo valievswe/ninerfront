@@ -21,7 +21,7 @@
       </div>
     </div>
 
-    <!-- Loop through each section of the original test -->
+    <!-- This is the single, corrected loop -->
     <div
       v-for="section in sortedSections"
       :key="section.id"
@@ -29,40 +29,71 @@
     >
       <h3>{{ section.type }} Section Review</h3>
 
-      <!-- Loop through each "Lego" block -->
-      <div
-        v-for="block in section.content.blocks"
-        :key="block.id"
-        class="block-review"
-      >
-        <p v-if="block.type === 'INSTRUCTION'" class="instruction-text">
-          {{ block.text }}
-        </p>
-
-        <!-- Display logic for question blocks -->
-        <div v-if="isQuestionBlock(block.type)">
-          <!-- Render a comparison for each individual question inside the block -->
-          <div
-            v-for="question in getQuestionsFromBlock(block)"
-            :key="question.id"
-            class="question-comparison"
-            :class="getComparisonClass(section.type, question.id)"
-          >
-            <div class="question-text">{{ question.text }}</div>
-            <div class="answers">
-              <div class="user-answer">
-                <strong>Your Answer:</strong> {{ getUserAnswer(section.type,
-                question.id) || '<em>(No Answer)</em>' }}
+      <!-- Display for WRITING Section -->
+      <div v-if="section.type === 'WRITING'">
+        <!-- Loop through each block -->
+        <div v-for="block in section.content.blocks" :key="block.id">
+          <!-- ONLY create the review block IF it's a writing prompt block -->
+          <div v-if="block.type === 'WRITING_PROMPT'" class="block-review">
+            <!-- Task 1 Content -->
+            <div class="task-container" v-if="block.task1_prompt">
+              <h4>Writing Prompt (Task 1)</h4>
+              <p class="writing-prompt">{{ block.task1_prompt }}</p>
+              <div class="user-writing-response">
+                <h4>Your Response (Task 1)</h4>
+                <p v-html="writingResponseTask1" class="writing-answer"></p>
               </div>
-              <div class="correct-answer">
-                <strong>Correct Answer:</strong>
-                {{ section.answers[question.id] }}
+            </div>
+
+            <!-- Task 2 Content -->
+            <div class="task-container" v-if="block.task2_prompt">
+              <h4>Writing Prompt (Task 2)</h4>
+              <p class="writing-prompt">{{ block.task2_prompt }}</p>
+              <div class="user-writing-response">
+                <h4>Your Response (Task 2)</h4>
+                <p v-html="writingResponseTask2" class="writing-answer"></p>
               </div>
             </div>
           </div>
         </div>
+      </div>
 
-        <!-- You can add display logic for WRITING_PROMPT here to show the student's essays -->
+      <!-- Display for LISTENING and READING Sections -->
+      <div v-else>
+        <div
+          v-for="block in section.content.blocks"
+          :key="block.id"
+          class="block-review"
+        >
+          <p v-if="block.type === 'INSTRUCTION'" class="instruction-text">
+            {{ block.text }}
+          </p>
+          <div v-if="isQuestionBlock(block.type)">
+            <div
+              v-for="question in getQuestionsFromBlock(block)"
+              :key="question.id"
+              class="question-comparison"
+              :class="getComparisonClass(section.type, question.id)"
+            >
+              <div class="question-text">{{ question.text }}</div>
+              <div class="answers">
+                <div class="user-answer">
+                  <strong>Your Answer:</strong>
+                  <span
+                    v-html="
+                      getUserAnswer(section.type, question.id) ||
+                      '<em>(No Answer)</em>'
+                    "
+                  ></span>
+                </div>
+                <div class="correct-answer">
+                  <strong>Correct Answer:</strong>
+                  {{ section.answers[question.id] }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -82,7 +113,6 @@ export default {
     };
   },
   computed: {
-    // Helper to ensure sections are always displayed in the correct order
     sortedSections() {
       if (!this.attempt) return [];
       const order = ["LISTENING", "READING", "WRITING"];
@@ -97,8 +127,6 @@ export default {
           (s) => s.type === "LISTENING"
         );
       if (!listeningSection?.content.blocks) return 0;
-
-      // We reduce the array of blocks to a single number: the total count of questions
       return listeningSection.content.blocks.reduce((total, block) => {
         if (block.type === "GAP_FILLING") {
           return total + ((block.text || "").match(/\{\{/g) || []).length;
@@ -115,7 +143,7 @@ export default {
         if (block.type === "MAP_LABELING") {
           return total + (block.labels?.length || 0);
         }
-        return total; // For INSTRUCTION, IMAGE, etc., add 0
+        return total;
       }, 0);
     },
     totalReadingQuestions() {
@@ -125,8 +153,6 @@ export default {
           (s) => s.type === "READING"
         );
       if (!readingSection?.content.blocks) return 0;
-
-      // The logic is identical to the listening counter
       return readingSection.content.blocks.reduce((total, block) => {
         if (block.type === "GAP_FILLING") {
           return total + ((block.text || "").match(/\{\{/g) || []).length;
@@ -148,6 +174,20 @@ export default {
         return total;
       }, 0);
     },
+    writingResponseTask1() {
+      if (!this.attempt || !this.attempt.userAnswers?.WRITING?.task1) {
+        return "<em>(No answer provided for Task 1)</em>";
+      }
+      const answer = this.attempt.userAnswers.WRITING.task1;
+      return String(answer).replace(/\n/g, "<br />");
+    },
+    writingResponseTask2() {
+      if (!this.attempt || !this.attempt.userAnswers?.WRITING?.task2) {
+        return "<em>(No answer provided for Task 2)</em>";
+      }
+      const answer = this.attempt.userAnswers.WRITING.task2;
+      return String(answer).replace(/\n/g, "<br />");
+    },
   },
   methods: {
     async fetchAttemptDetails() {
@@ -161,7 +201,6 @@ export default {
         this.isLoading = false;
       }
     },
-    // A helper to check if a block contains questions
     isQuestionBlock(type) {
       return [
         "GAP_FILLING",
@@ -171,7 +210,6 @@ export default {
         "MAP_LABELING",
       ].includes(type);
     },
-    // The "magic" method to extract individual questions from any block type
     getQuestionsFromBlock(block) {
       if (block.type === "GAP_FILLING") {
         const placeholders =
@@ -191,7 +229,6 @@ export default {
     getUserAnswer(sectionType, questionId) {
       return this.attempt.userAnswers[sectionType]?.[questionId];
     },
-    // A helper to style the comparison row based on correctness
     getComparisonClass(sectionType, questionId) {
       const userAnswer = this.getUserAnswer(sectionType, questionId);
       const correctAnswer =
@@ -261,5 +298,26 @@ export default {
 }
 .answers {
   text-align: right;
+}
+.task-container {
+  margin-bottom: 30px;
+}
+.writing-prompt {
+  background-color: #eef2ff;
+  padding: 15px;
+  border-radius: 6px;
+  line-height: 1.6;
+  color: #374151;
+}
+.user-writing-response {
+  margin-top: 20px;
+}
+.writing-answer {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  padding: 15px;
+  border-radius: 6px;
+  line-height: 1.6;
+  white-space: pre-wrap;
 }
 </style>
