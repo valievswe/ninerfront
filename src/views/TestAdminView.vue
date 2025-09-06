@@ -187,9 +187,26 @@ export default {
     },
     async handleScheduleTest() {
       try {
-        await api.scheduleTest(this.schedule);
+        // 1. Create true Date objects from the local datetime strings
+        const startTimeAsDate = new Date(this.schedule.startTime);
+        const endTimeAsDate = new Date(this.schedule.endTime);
+
+        // 2. Convert these dates to full UTC ISO strings (e.g., "2025-09-07T02:45:00.000Z")
+        const startTimeUtc = startTimeAsDate.toISOString();
+        const endTimeUtc = endTimeAsDate.toISOString();
+
+        // 3. Create the payload to send to the server with the correct UTC times
+        const payload = {
+          testTemplateId: this.schedule.testTemplateId,
+          startTime: startTimeUtc,
+          endTime: endTimeUtc,
+        };
+
+        // 4. Send the UTC-converted payload
+        await api.scheduleTest(payload);
+
         alert("Test scheduled successfully!");
-        this.fetchScheduledTests(); // Refresh the schedule log
+        this.fetchScheduledTests();
         // Reset form
         this.schedule.testTemplateId = "";
         this.schedule.startTime = "";
@@ -198,6 +215,7 @@ export default {
         alert("Failed to schedule test.");
       }
     },
+
     async fetchScheduledTests() {
       this.isLoadingSchedules = true;
       try {
