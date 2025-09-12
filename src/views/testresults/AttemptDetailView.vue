@@ -75,20 +75,30 @@
               class="question-comparison"
               :class="getComparisonClass(section.type, question.id)"
             >
-              <div class="question-text">{{ question.text }}</div>
+              <div
+                class="question-text"
+                v-html="
+                  question.text.replace(
+                    /\{\{([a-zA-Z0-9]+)\}\}/g,
+                    '<strong>___</strong>'
+                  )
+                "
+              ></div>
               <div class="answers">
                 <div class="user-answer">
                   <strong>Your Answer:</strong>
+                  <!-- Use the new formatter -->
                   <span
                     v-html="
-                      getUserAnswer(section.type, question.id) ||
-                      '<em>(No Answer)</em>'
+                      formatAnswerForDisplay(
+                        getUserAnswer(section.type, question.id)
+                      )
                     "
                   ></span>
                 </div>
                 <div class="correct-answer">
                   <strong>Correct Answer:</strong>
-                  {{ section.answers[question.id] }}
+                  {{ formatAnswerForDisplay(section.answers[question.id]) }}
                 </div>
               </div>
             </div>
@@ -210,13 +220,26 @@ export default {
         "MAP_LABELING",
       ].includes(type);
     },
+    formatAnswerForDisplay(answer) {
+      if (answer === undefined || answer === null || answer === "") {
+        return "<em>(No Answer)</em>";
+      }
+      if (Array.isArray(answer)) {
+        if (answer.length === 0) return "<em>(No Answer)</em>";
+        return answer.join(", ");
+      }
+      return answer;
+    },
     getQuestionsFromBlock(block) {
       if (block.type === "GAP_FILLING") {
         const placeholders =
           (block.text || "").match(/\{\{([a-zA-Z0-9]+)\}\}/g) || [];
-        return placeholders.map((p) => ({
+
+        return placeholders.map((p, index) => ({
           id: p.replace(/\{|\}/g, ""),
-          text: `Gap: ${p}`,
+
+          key: `${block.id}_${index}`,
+          text: block.text,
         }));
       }
       if (block.type === "MULTIPLE_CHOICE")
@@ -227,15 +250,25 @@ export default {
       return [];
     },
     getUserAnswer(sectionType, questionId) {
-      return this.attempt.userAnswers[sectionType]?.[questionId];
+      return this.attempt?.userAnswers?.[sectionType]?.[questionId];
     },
     getComparisonClass(sectionType, questionId) {
       const userAnswer = this.getUserAnswer(sectionType, questionId);
       const correctAnswer =
         this.attempt.scheduledTest.testTemplate.sections.find(
           (s) => s.type === sectionType
-        ).answers[questionId];
-      if (userAnswer === correctAnswer) {
+        )?.answers?.[questionId];
+
+      const formatForCompare = (ans) => {
+        if (ans === undefined || ans === null) return "undefined";
+        if (Array.isArray(ans)) {
+          if (ans.length === 0) return "empty_array";
+          return [...ans].sort().join(",");
+        }
+        return String(ans);
+      };
+
+      if (formatForCompare(userAnswer) === formatForCompare(correctAnswer)) {
         return "correct";
       }
       return "incorrect";

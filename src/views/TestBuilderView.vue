@@ -238,20 +238,43 @@
                       <label>Question Text</label>
                       <textarea v-model="editingBlock.text" rows="3"></textarea>
                     </div>
+
+                    <!-- CHECKBOX TO TOGGLE MULTIPLE SELECTION MODE -->
+                    <div class="form-group form-group-inline">
+                      <input
+                        type="checkbox"
+                        :id="`allow_multiple_${editingBlock.id}`"
+                        v-model="editingBlock.allowMultiple"
+                        @change="toggleMultipleChoiceType(editingBlock)"
+                      />
+                      <label :for="`allow_multiple_${editingBlock.id}`"
+                        >Allow multiple selections</label
+                      >
+                    </div>
+
                     <div class="form-group">
-                      <label>Options & Correct Answer</label>
+                      <label>Options & Correct Answer(s)</label>
                       <p class="help-text">
-                        Select the correct answer by clicking the circle. Edit
-                        the text for each option.
+                        Select the correct answer(s) by clicking the
+                        circle/square. Edit the text for each option.
                       </p>
                       <div
                         v-for="(option, index) in editingBlock.options"
                         :key="index"
                         class="option-editor-item"
                       >
+                        <!-- Conditionally render RADIO for single choice -->
                         <input
+                          v-if="!editingBlock.allowMultiple"
                           type="radio"
                           :name="`correct_answer_${editingBlock.id}`"
+                          :value="option"
+                          v-model="editingBlock.answers[editingBlock.id]"
+                        />
+                        <!-- Conditionally render CHECKBOX for multiple choices -->
+                        <input
+                          v-else
+                          type="checkbox"
                           :value="option"
                           v-model="editingBlock.answers[editingBlock.id]"
                         />
@@ -749,12 +772,7 @@ export default {
       const finalAnswers = {};
       if (sectionToSave.content.blocks) {
         for (const block of sectionToSave.content.blocks) {
-          if (
-            (block.type === "GAP_FILLING" ||
-              block.type === "MULTIPLE_CHOICE" ||
-              block.type === "MATCHING") &&
-            block.answers
-          ) {
+          if (block.answers) {
             Object.assign(finalAnswers, block.answers);
           }
         }
@@ -797,7 +815,7 @@ export default {
       if (type === "MULTIPLE_CHOICE") {
         newBlock.text = "Which is the correct answer?";
         newBlock.options = ["Option A", "Option B", "Option C"];
-
+        newBlock.allowMultiple = false;
         newBlock.answers = { [newBlock.id]: "Option A" };
       }
 
@@ -1126,6 +1144,24 @@ export default {
       return icons[type] || "fa-solid fa-question-circle";
     },
 
+    toggleMultipleChoiceType(block) {
+      const answerKey = block.id;
+      const currentAnswer = block.answers[answerKey];
+
+      if (block.allowMultiple) {
+        if (typeof currentAnswer === "string" && currentAnswer !== "") {
+          block.answers[answerKey] = [currentAnswer];
+        } else {
+          block.answers[answerKey] = [];
+        }
+      } else {
+        if (Array.isArray(currentAnswer) && currentAnswer.length > 0) {
+          block.answers[answerKey] = currentAnswer[0];
+        } else {
+          block.answers[answerKey] = "";
+        }
+      }
+    },
     //-- TRUE FALSE NOT GIVEN
     addStatement() {
       if (this.editingBlock?.type !== "TRUE_FALSE_NOT_GIVEN") return;
@@ -1147,9 +1183,7 @@ export default {
       if (this.editingBlock?.type !== "TRUE_FALSE_NOT_GIVEN") return;
 
       const statementToDelete = this.editingBlock.statements[index];
-      // Delete the associated answer first
       delete this.editingBlock.answers[statementToDelete.id];
-      // Then delete the statement from the array
       this.editingBlock.statements.splice(index, 1);
     },
 
@@ -1167,16 +1201,13 @@ export default {
       }
 
       this.editingBlock.labels.push(newLabel);
-      // Initialize its answer
       this.editingBlock.answers[newLabel.id] = "";
     },
     deleteMapLabel(index) {
       if (this.editingBlock?.type !== "MAP_LABELING") return;
 
       const labelToDelete = this.editingBlock.labels[index];
-      // Delete the associated answer first
       delete this.editingBlock.answers[labelToDelete.id];
-      // Then delete the label from the array
       this.editingBlock.labels.splice(index, 1);
     },
   },

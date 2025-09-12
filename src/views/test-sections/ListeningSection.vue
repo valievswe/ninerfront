@@ -1,170 +1,175 @@
 <template>
   <div class="section-view">
-    <div class="section-header">
-      <h1>Listening Section</h1>
-      <div class="timer" :class="{ 'low-time': timeLeft < 300 }">
-        <i class="fa-solid fa-clock"></i> Time Left: {{ formattedTimeLeft }}
-      </div>
-    </div>
+    <div v-if="!sectionData" class="loading-container">Loading Section...</div>
 
-    <div v-if="isLoading" class="loading-container">Loading Section...</div>
-
-    <div v-else-if="sectionData" class="test-content">
-      <!-- Start Button Overlay -->
+    <div v-else>
       <div v-if="!hasStarted" class="start-overlay">
         <h2>Instructions</h2>
         <p>
-          This is the Listening section. The audio will begin playing
-          automatically and will play only once. You will have 40 minutes to
-          complete this section.
+          The audio will play only once. You cannot pause or replay it. Click
+          below when you are ready to begin.
         </p>
         <button @click="startTest" class="btn-primary start-btn">
-          <i class="fa-solid fa-play"></i> I am ready to begin
+          <i class="fa-solid fa-play"></i> Start Listening Section
         </button>
       </div>
 
-      <!-- Main Test Content (shown after start) -->
       <div v-show="hasStarted">
-        <audio
-          ref="audioPlayer"
+        <IeltsAudioPlayer
+          v-if="sectionData.content.audioUrl"
+          ref="audioPlayerRef"
           :src="sectionData.content.audioUrl"
-          controlslist="nodownload"
-        ></audio>
+          @ended="onAudioEnded"
+        />
 
         <BlockRenderer
           v-for="block in sectionData.content.blocks"
           :key="block.id"
           :block="block"
+          :user-answers="userAnswers"
           @answer-update="updateUserAnswer"
         />
-        <button
-          @click="confirmAndSubmit"
-          class="btn-primary submit-btn"
-          :disabled="isSubmitting"
-        >
-          {{
-            isSubmitting
-              ? "Submitting..."
-              : "Submit Reading Section and Continue"
-          }}
-        </button>
       </div>
     </div>
   </div>
 </template>
 
-<script>
+<script setup>
+import { ref, onMounted, onUnmounted, inject, nextTick } from "vue";
 import api from "../../services/api";
+import IeltsAudioPlayer from "../../components/IeltsAudioPlayer.vue";
 import BlockRenderer from "../../views/UserTestTaking/BlockRenderer.vue";
-import testTimerMixin from "./TestTime";
 
-export default {
-  name: "ListeningView",
-  components: { BlockRenderer },
-  mixins: [testTimerMixin], // Use the timer logic
-  props: ["attemptId"],
-  data() {
-    return {
-      sectionData: null,
-      isLoading: false,
-      isSubmitting: false,
-      userAnswers: {},
-      hasStarted: false, // Controls the start overlay
-    };
-  },
-  methods: {
-    async fetchSectionContent() {
-      this.isLoading = true;
-      try {
-        const response = await api.getSectionContent(
-          this.attemptId,
-          "LISTENING"
-        );
-        this.sectionData = response.data;
-        console.log("Data received by TestRoom:", response.data);
-      } catch (err) {
-        alert(
-          "Could not load the Listening section. You may not have permission, or the test has ended."
-        );
-        this.$router.push("/dashboard"); // Redirect on error
-      } finally {
-        this.isLoading = false;
-      }
-    },
+const props = defineProps({ attemptId: String });
 
-    async startTest() {
-      this.hasStarted = true;
+// --- STATE MANAGEMENT ---
+const testState = inject("testState");
+const sectionData = ref(null);
+const userAnswers = ref({});
+const hasStarted = ref(false);
+const audioPlayerRef = ref(null);
+let observer = null; // For IntersectionObserver
 
-      await this.$nextTick();
+// --- METHODS ---
 
-      const player = this.$refs.audioPlayer;
-      if (player) {
-        try {
-          await player.play();
+const startTest = () => {
+  hasStarted.value = true;
 
-          this.startTimer(2400, this.autoSubmit);
-          console.log("Audio playback started successfully.");
-        } catch (error) {
-          console.error("Audio playback failed:", error);
-          alert(
-            "Could not start the audio. Please check your browser permissions and try again."
-          );
+  if (testState.value && testState.value.startTimer) {
+    testState.value.startTimer(2400); // Tell the parent to start a 40-min countdown
+  }
 
-          this.hasStarted = false;
-        }
-      }
-    },
-
-    updateUserAnswer({ questionId, answer }) {
-      this.userAnswers[questionId] = answer;
-    },
-
-    async autoSubmit() {
-      if (this.isSubmitting) return;
-      this.isSubmitting = true;
-
-      if (this.timer) clearInterval(this.timer);
-
-      if (this.timeLeft === 0) {
-        alert(
-          "Time is up for the Listening section. Your answers have been saved. You will now proceed to the Reading section."
-        );
-      }
-
-      try {
-        await api.submitSectionAnswers(
-          this.attemptId,
-          "LISTENING",
-          this.userAnswers
-        );
-        this.$router.push({
-          name: "ReadingSection",
-          params: { attemptId: this.attemptId },
-        });
-      } catch (err) {
-        alert("Failed to submit listening answers.");
-        this.$router.push("/dashboard");
-      } finally {
-        this.isSubmitting = false;
-      }
-    },
-
-    confirmAndSubmit() {
-      if (
-        confirm(
-          "Are you sure you want to submit the Listening section? You cannot return to it later."
-        )
-      ) {
-        this.autoSubmit();
-      }
-    },
-  },
-  created() {
-    this.fetchSectionContent();
-  },
+  nextTick(() => {
+    if (audioPlayerRef.value) {
+      audioPlayerRef.value.play();
+      console.log("Audio playback initiated.");
+    }
+  });
 };
-</script>
 
+const onAudioEnded = () => {
+  alert(
+    "The audio has finished. Please use the remaining time to check your answers."
+  );
+};
+
+const updateUserAnswer = (answerObject) => {
+  const questionId = Object.keys(answerObject)[0];
+  userAnswers.value[questionId] = answerObject[questionId];
+
+  if (testState.value) {
+    const questionInNav = testState.value.questions.find(
+      (q) => q.id === questionId
+    );
+    if (questionInNav) {
+      const answerValue = answerObject[questionId];
+      questionInNav.status =
+        answerValue && String(answerValue).length > 0
+          ? "answered"
+          : "unanswered";
+    }
+  }
+};
+
+const setupIntersectionObserver = () => {
+  const options = {
+    root: document.querySelector(".test-main-content"),
+    rootMargin: "-40% 0px -40% 0px",
+    threshold: 0,
+  };
+
+  observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting && testState.value) {
+        testState.value.currentQuestionInView = entry.target.id;
+      }
+    });
+  }, options);
+
+  // Use nextTick to ensure elements are in the DOM before observing
+  nextTick(() => {
+    testState.value.questions.forEach((q) => {
+      const el = document.getElementById(q.id);
+      if (el) observer.observe(el);
+    });
+  });
+};
+
+// --- LIFECYCLE HOOKS ---
+
+onMounted(async () => {
+  try {
+    const response = await api.getSectionContent(props.attemptId, "LISTENING");
+    sectionData.value = response.data;
+
+    if (testState.value && sectionData.value) {
+      testState.value.sectionTitle = "Listening";
+
+      let questionCounter = 1;
+      testState.value.questions = sectionData.value.content.blocks.flatMap(
+        (block) => {
+          // Find all unique question placeholders like {{q1}}, {{q2}}, etc.
+          const placeholders =
+            JSON.stringify(block).match(/\{\{([a-zA-Z0-9_]+)\}\}/g) || [];
+          const questionIds = [
+            ...new Set(placeholders.map((p) => p.replace(/\{|\}/g, ""))),
+          ];
+
+          // Map them to objects for the nav bar
+          return questionIds.map((id) => ({
+            id: id,
+            displayId: questionCounter++,
+            status: "unanswered",
+            isFlagged: false,
+            blockId: block.id, // So we can scroll to the parent block
+          }));
+        }
+      );
+
+      // Update scrollToQuestion function to scroll to the parent block
+      testState.value.scrollToQuestion = (questionId) => {
+        const question = testState.value.questions.find(
+          (q) => q.id === questionId
+        );
+        if (question && question.blockId) {
+          const element = document.getElementById(question.blockId);
+          if (element)
+            element.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      };
+
+      setupIntersectionObserver();
+    }
+  } catch (err) {
+    console.error("Failed to load listening section:", err);
+    alert("Could not load the listening section.");
+  }
+});
+
+onUnmounted(() => {
+  if (observer) observer.disconnect();
+});
+</script>
 <style scoped>
 .section-view {
   max-width: 90%;

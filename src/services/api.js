@@ -133,7 +133,9 @@ export default {
     });
   },
 
-  finishTestAttempt(attemptId) {
-    return apiClient.post(`/tests/attempts/${attemptId}/finish`);
+  finishTestAttempt(attemptId, answers) {
+    return apiClient.post(`/tests/attempts/${attemptId}/finish`, {
+      userAnswers: answers,
+    });
   },
 };

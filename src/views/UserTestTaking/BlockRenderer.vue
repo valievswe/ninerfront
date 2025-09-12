@@ -7,6 +7,7 @@
 
     <!-- GAP_FILLING Block -->
     <div v-else-if="block.type === 'GAP_FILLING'" class="gap-filling-block">
+      <!-- This component should emit its answers in the correct object format -->
       <GappFilling
         :template-string="block.text"
         @answer-update="$emit('answer-update', $event)"
@@ -22,11 +23,23 @@
       <div class="options-container">
         <div v-for="option in block.options" :key="option" class="option">
           <input
+            v-if="!block.allowMultiple"
             type="radio"
             :id="`mc_q_${block.id}_${option}`"
             :name="`mc_q_${block.id}`"
             :value="option"
             @change="updateAnswer(block.id, option)"
+          />
+
+          <!-- MULTIPLE ANSWERS (CHECKBOX) -->
+          <input
+            v-else
+            type="checkbox"
+            :id="`mc_q_${block.id}_${option}`"
+            :value="option"
+            @change="
+              updateMultipleAnswers(block.id, option, $event.target.checked)
+            "
           />
           <label :for="`mc_q_${block.id}_${option}`">{{ option }}</label>
         </div>
@@ -125,6 +138,7 @@
       </div>
     </div>
 
+    <!-- WRITING_PROMPT Block -->
     <div
       v-else-if="block.type === 'WRITING_PROMPT'"
       class="writing-prompt-block"
@@ -139,50 +153,103 @@
           alt="Writing Task 1 Image"
           class="display-image"
         />
-        <textarea
-          class="writing-textarea"
-          placeholder="Type your response for Task 1 here..."
-          :value="userAnswers.WRITING.task1"
-          @input="updateWritingAnswer('task1', $event.target.value)"
-        ></textarea>
+        <!-- ========================================================== -->
+        <!-- THE FIX: Only show textareas if NOT in display-only mode   -->
+        <!-- ========================================================== -->
+        <template v-if="!isDisplayOnly">
+          <textarea
+            class="writing-textarea"
+            placeholder="Type your response for Task 1 here..."
+            :value="userAnswers.task1"
+            @input="updateWritingAnswer('task1', $event.target.value)"
+          ></textarea>
+        </template>
       </div>
 
       <!-- Task 2 Container -->
       <div class="task-container" v-if="block.task2_prompt">
         <h4>Writing Task 2</h4>
         <p class="prompt-text">{{ block.task2_prompt }}</p>
-        <textarea
-          class="writing-textarea"
-          placeholder="Type your response for Task 2 here..."
-          :value="userAnswers.WRITING.task2"
-          @input="updateWritingAnswer('task2', $event.target.value)"
-        ></textarea>
+        <template v-if="!isDisplayOnly">
+          <textarea
+            class="writing-textarea"
+            placeholder="Type your response for Task 2 here..."
+            :value="userAnswers.task2"
+            @input="updateWritingAnswer('task2', $event.target.value)"
+          ></textarea>
+        </template>
       </div>
     </div>
   </div>
 </template>
 
+// In: BlockRenderer.vue
+
 <script>
 import GappFilling from "./GappFilling.vue";
+
 export default {
   name: "BlockRenderer",
   components: { GappFilling },
   props: {
     block: { type: Object, required: true },
-    userAnswers: { type: Object, required: true },
+    userAnswers: {
+      type: Object,
+      default: () => ({}),
+    },
+    isDisplayOnly: {
+      type: Boolean,
+      default: false,
+    },
   },
   emits: ["answer-update"],
   methods: {
+    // Universal method for single-value inputs
     updateAnswer(questionId, answer) {
-      this.$emit("answer-update", { questionId, answer });
+      const payload = { [questionId]: answer };
+      console.log(
+        `%c[BlockRenderer] Emitting single answer:`,
+        "color: blue;",
+        payload
+      );
+      this.$emit("answer-update", payload);
     },
+
+    // Special method for multiple-answer checkboxes
+    updateMultipleAnswers(questionId, option, isChecked) {
+      if (!this.userAnswers) return;
+
+      const currentAnswers = this.userAnswers[questionId] || [];
+      let newAnswers;
+
+      if (isChecked) {
+        newAnswers = [...currentAnswers, option];
+      } else {
+        newAnswers = currentAnswers.filter((ans) => ans !== option);
+      }
+
+      const payload = { [questionId]: newAnswers };
+      console.log(
+        `%c[BlockRenderer] Emitting multiple answers:`,
+        "color: blue;",
+        payload
+      );
+      this.$emit("answer-update", payload);
+    },
+
+    // Special method for Writing section
     updateWritingAnswer(taskType, answer) {
-      this.$emit("answer-update", { questionId: taskType, answer });
+      const payload = { questionId: taskType, answer: answer };
+      console.log(
+        `%c[BlockRenderer] Emitting writing answer:`,
+        "color: blue;",
+        payload
+      );
+      this.$emit("answer-update", payload);
     },
   },
 };
 </script>
-
 <style scoped>
 .block-display-container {
   padding: 15px;
