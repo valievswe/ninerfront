@@ -1,6 +1,9 @@
+<!-- src/views/test-sections/ReadingSection.vue -->
 <template>
   <div class="section-content-wrapper">
-    <div v-if="!sectionData" class="loading-container">Loading Section...</div>
+    <div v-if="isLoading" class="loading-container">
+      <p>Loading Reading Section...</p>
+    </div>
 
     <div v-else class="split-view-container">
       <!-- Left Side: Reading Passage -->
@@ -17,12 +20,10 @@
         <BlockRenderer
           v-for="block in sectionData.content.blocks"
           :key="block.id"
-          :id="block.id"
           :block="block"
-          :user-answers="userAnswers"
+          :user-answers="allUserAnswers.READING"
           @answer-update="updateUserAnswer"
         />
-        <!-- The submit button is now in the parent TestLayout, so it's removed from here -->
       </div>
     </div>
   </div>
@@ -30,23 +31,27 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, inject, nextTick } from "vue";
-import api from "../../services/api"; // Adjust path if needed
-import BlockRenderer from "../../views/UserTestTaking/BlockRenderer.vue"; // Adjust path if needed
+import api from "../../services/api";
+import BlockRenderer from "../UserTestTaking/BlockRenderer.vue";
 
+// eslint-disable-next-line no-undef
 const props = defineProps({ attemptId: String });
 
 // --- STATE MANAGEMENT ---
 const testState = inject("testState");
+const allUserAnswers = inject("allUserAnswers"); // Inject the centralized answer store
+
 const sectionData = ref(null);
-const userAnswers = ref({});
-let observer = null; // To hold our IntersectionObserver instance
+const isLoading = ref(true);
+let observer = null;
 
 // --- METHODS ---
-
 const updateUserAnswer = (answerObject) => {
   const questionId = Object.keys(answerObject)[0];
-  userAnswers.value[questionId] = answerObject[questionId];
+  // Write the answer directly to the parent's centralized state
+  allUserAnswers.value.READING[questionId] = answerObject[questionId];
 
+  // Update the nav bar status
   if (testState.value) {
     const questionInNav = testState.value.questions.find(
       (q) => q.id === questionId
@@ -65,19 +70,23 @@ const setupIntersectionObserver = () => {
   const options = {
     root: document.querySelector(".test-main-content"),
     rootMargin: "-40% 0px -40% 0px",
-    threshold: 0,
   };
 
   observer = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
       if (entry.isIntersecting && testState.value) {
-        testState.value.currentQuestionInView = entry.target.id;
+        const firstQuestionInBlock = testState.value.questions.find(
+          (q) => q.blockId === entry.target.id
+        );
+        if (firstQuestionInBlock) {
+          testState.value.currentQuestionInView = firstQuestionInBlock.id;
+        }
       }
     });
   }, options);
 
   nextTick(() => {
-    if (sectionData.value && sectionData.value.content.blocks) {
+    if (sectionData.value?.content.blocks) {
       sectionData.value.content.blocks.forEach((block) => {
         const el = document.getElementById(block.id);
         if (el) observer.observe(el);
@@ -87,66 +96,93 @@ const setupIntersectionObserver = () => {
 };
 
 // --- LIFECYCLE HOOKS ---
-
 onMounted(async () => {
   try {
     const response = await api.getSectionContent(props.attemptId, "READING");
     sectionData.value = response.data;
 
     if (testState.value && sectionData.value) {
-      // 1. Set the title for the header in the parent layout
       testState.value.sectionTitle = "Reading";
 
-      // 2. Automatically start the timer via the parent layout
+      // Automatically start the timer for the Reading section
       if (testState.value.startTimer) {
-        testState.value.startTimer(3600); // 60 minutes for Reading
+        testState.value.startTimer(3600); // 60 minutes
       }
 
-      // 3. Populate the question list for the bottom navigation bar
+      // Logic to populate the nav bar (unchanged and correct)
       let questionCounter = 1;
-      testState.value.questions = sectionData.value.content.blocks
-        .filter(
-          (block) => block.type !== "INSTRUCTION" && block.type !== "IMAGE"
-        )
-        .map((block) => ({
-          id: block.id,
-          displayId: questionCounter++, // Display simple numbers 1, 2, 3...
-          status: "unanswered",
-          isFlagged: false,
-        }));
+      testState.value.questions = sectionData.value.content.blocks.reduce(
+        (acc, block) => {
+          const findIds = (obj) => {
+            let ids = [];
+            if (obj && typeof obj === "object") {
+              if (
+                obj.id &&
+                (String(obj.id).startsWith("q_") ||
+                  block.type === "MULTIPLE_CHOICE")
+              ) {
+                if (
+                  !acc.some((q) => q.id === obj.id) &&
+                  !ids.some((i) => i.id === obj.id)
+                ) {
+                  ids.push({
+                    id: obj.id,
+                    displayId: questionCounter++,
+                    status: "unanswered",
+                    blockId: block.id,
+                  });
+                }
+              }
+              for (const key in obj) {
+                ids = ids.concat(findIds(obj[key]));
+              }
+            }
+            return ids;
+          };
+          return acc.concat(findIds(block));
+        },
+        []
+      );
 
-      // 4. Provide the scroll-to function to the parent layout
-      testState.value.scrollToQuestion = (blockId) => {
-        const element = document.getElementById(blockId);
-        if (element) {
-          element.scrollIntoView({ behavior: "smooth", block: "center" });
+      testState.value.scrollToQuestion = (questionId) => {
+        const question = testState.value.questions.find(
+          (q) => q.id === questionId
+        );
+        if (question && question.blockId) {
+          document
+            .getElementById(question.blockId)
+            ?.scrollIntoView({ behavior: "smooth", block: "center" });
         }
       };
 
-      // 5. Initialize the scroll-tracking observer
       setupIntersectionObserver();
     }
   } catch (err) {
     console.error("Failed to load reading section:", err);
     alert("Could not load the Reading section.");
+  } finally {
+    isLoading.value = false;
   }
 });
 
 onUnmounted(() => {
-  if (observer) {
-    observer.disconnect();
-  }
+  if (observer) observer.disconnect();
 });
 </script>
+>
 
 <style scoped>
-/* Scoped styles are now much cleaner */
+.loading-container {
+  text-align: center;
+  padding: 50px;
+  font-size: 1.2rem;
+  color: #6c757d;
+}
 .split-view-container {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 30px;
 }
-
 .passage-pane,
 .questions-pane {
   background-color: #fff;
@@ -156,14 +192,8 @@ onUnmounted(() => {
   height: calc(100vh - 160px); /* Adjust based on your header/footer height */
   overflow-y: auto;
 }
-
 .reading-passage {
   line-height: 1.7;
   font-size: 1.05em;
-}
-
-.loading-container {
-  text-align: center;
-  padding: 50px;
 }
 </style>

@@ -1,8 +1,11 @@
 <template>
-  <div class="section-view">
-    <div v-if="!sectionData" class="loading-container">Loading Section...</div>
+  <div class="section-content-wrapper">
+    <div v-if="isLoading" class="loading-container">
+      <p>Loading Listening Section...</p>
+    </div>
 
     <div v-else>
+      <!-- "Start Section" Overlay -->
       <div v-if="!hasStarted" class="start-overlay">
         <h2>Instructions</h2>
         <p>
@@ -14,6 +17,7 @@
         </button>
       </div>
 
+      <!-- Main Test Content -->
       <div v-show="hasStarted">
         <IeltsAudioPlayer
           v-if="sectionData.content.audioUrl"
@@ -21,12 +25,11 @@
           :src="sectionData.content.audioUrl"
           @ended="onAudioEnded"
         />
-
         <BlockRenderer
           v-for="block in sectionData.content.blocks"
           :key="block.id"
           :block="block"
-          :user-answers="userAnswers"
+          :user-answers="allUserAnswers.LISTENING"
           @answer-update="updateUserAnswer"
         />
       </div>
@@ -38,31 +41,30 @@
 import { ref, onMounted, onUnmounted, inject, nextTick } from "vue";
 import api from "../../services/api";
 import IeltsAudioPlayer from "../../components/IeltsAudioPlayer.vue";
-import BlockRenderer from "../../views/UserTestTaking/BlockRenderer.vue";
+import BlockRenderer from "../UserTestTaking/BlockRenderer.vue";
 
+// eslint-disable-next-line no-undef
 const props = defineProps({ attemptId: String });
 
 // --- STATE MANAGEMENT ---
 const testState = inject("testState");
+const allUserAnswers = inject("allUserAnswers"); // Inject the centralized answer store
+
 const sectionData = ref(null);
-const userAnswers = ref({});
+const isLoading = ref(true);
 const hasStarted = ref(false);
 const audioPlayerRef = ref(null);
-let observer = null; // For IntersectionObserver
+let observer = null;
 
 // --- METHODS ---
-
 const startTest = () => {
   hasStarted.value = true;
-
   if (testState.value && testState.value.startTimer) {
-    testState.value.startTimer(2400); // Tell the parent to start a 40-min countdown
+    testState.value.startTimer(2400); // 40 minutes
   }
-
   nextTick(() => {
     if (audioPlayerRef.value) {
       audioPlayerRef.value.play();
-      console.log("Audio playback initiated.");
     }
   });
 };
@@ -75,8 +77,10 @@ const onAudioEnded = () => {
 
 const updateUserAnswer = (answerObject) => {
   const questionId = Object.keys(answerObject)[0];
-  userAnswers.value[questionId] = answerObject[questionId];
+  // Write the answer directly to the parent's centralized state
+  allUserAnswers.value.LISTENING[questionId] = answerObject[questionId];
 
+  // Update the nav bar status
   if (testState.value) {
     const questionInNav = testState.value.questions.find(
       (q) => q.id === questionId
@@ -95,28 +99,32 @@ const setupIntersectionObserver = () => {
   const options = {
     root: document.querySelector(".test-main-content"),
     rootMargin: "-40% 0px -40% 0px",
-    threshold: 0,
   };
 
   observer = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
       if (entry.isIntersecting && testState.value) {
-        testState.value.currentQuestionInView = entry.target.id;
+        const firstQuestionInBlock = testState.value.questions.find(
+          (q) => q.blockId === entry.target.id
+        );
+        if (firstQuestionInBlock) {
+          testState.value.currentQuestionInView = firstQuestionInBlock.id;
+        }
       }
     });
   }, options);
 
-  // Use nextTick to ensure elements are in the DOM before observing
   nextTick(() => {
-    testState.value.questions.forEach((q) => {
-      const el = document.getElementById(q.id);
-      if (el) observer.observe(el);
-    });
+    if (sectionData.value?.content.blocks) {
+      sectionData.value.content.blocks.forEach((block) => {
+        const el = document.getElementById(block.id);
+        if (el) observer.observe(el);
+      });
+    }
   });
 };
 
 // --- LIFECYCLE HOOKS ---
-
 onMounted(async () => {
   try {
     const response = await api.getSectionContent(props.attemptId, "LISTENING");
@@ -125,36 +133,49 @@ onMounted(async () => {
     if (testState.value && sectionData.value) {
       testState.value.sectionTitle = "Listening";
 
+      // Logic to populate the nav bar (unchanged and correct)
       let questionCounter = 1;
-      testState.value.questions = sectionData.value.content.blocks.flatMap(
-        (block) => {
-          // Find all unique question placeholders like {{q1}}, {{q2}}, etc.
-          const placeholders =
-            JSON.stringify(block).match(/\{\{([a-zA-Z0-9_]+)\}\}/g) || [];
-          const questionIds = [
-            ...new Set(placeholders.map((p) => p.replace(/\{|\}/g, ""))),
-          ];
-
-          // Map them to objects for the nav bar
-          return questionIds.map((id) => ({
-            id: id,
-            displayId: questionCounter++,
-            status: "unanswered",
-            isFlagged: false,
-            blockId: block.id, // So we can scroll to the parent block
-          }));
-        }
+      testState.value.questions = sectionData.value.content.blocks.reduce(
+        (acc, block) => {
+          const findIds = (obj) => {
+            let ids = [];
+            if (obj && typeof obj === "object") {
+              if (
+                obj.id &&
+                (String(obj.id).startsWith("q_") ||
+                  block.type === "MULTIPLE_CHOICE")
+              ) {
+                if (
+                  !acc.some((q) => q.id === obj.id) &&
+                  !ids.some((i) => i.id === obj.id)
+                ) {
+                  ids.push({
+                    id: obj.id,
+                    displayId: questionCounter++,
+                    status: "unanswered",
+                    blockId: block.id,
+                  });
+                }
+              }
+              for (const key in obj) {
+                ids = ids.concat(findIds(obj[key]));
+              }
+            }
+            return ids;
+          };
+          return acc.concat(findIds(block));
+        },
+        []
       );
 
-      // Update scrollToQuestion function to scroll to the parent block
       testState.value.scrollToQuestion = (questionId) => {
         const question = testState.value.questions.find(
           (q) => q.id === questionId
         );
         if (question && question.blockId) {
-          const element = document.getElementById(question.blockId);
-          if (element)
-            element.scrollIntoView({ behavior: "smooth", block: "center" });
+          document
+            .getElementById(question.blockId)
+            ?.scrollIntoView({ behavior: "smooth", block: "center" });
         }
       };
 
@@ -163,6 +184,8 @@ onMounted(async () => {
   } catch (err) {
     console.error("Failed to load listening section:", err);
     alert("Could not load the listening section.");
+  } finally {
+    isLoading.value = false;
   }
 });
 
@@ -171,34 +194,11 @@ onUnmounted(() => {
 });
 </script>
 <style scoped>
-.section-view {
-  max-width: 90%;
-  margin: 20px auto;
-}
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  background-color: #fff;
-  padding: 15px 25px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  position: sticky;
-  top: 10px;
-  z-index: 100;
-}
-.timer {
-  font-size: 1.5em;
-  font-weight: bold;
-  background-color: #1f2937;
-  color: white;
-  padding: 10px 20px;
-  border-radius: 6px;
-  font-family: monospace;
-}
-.timer.low-time {
-  background-color: #ef4444;
+.loading-container {
+  text-align: center;
+  padding: 50px;
+  font-size: 1.2rem;
+  color: #6c757d;
 }
 .start-overlay {
   text-align: center;
@@ -214,17 +214,12 @@ onUnmounted(() => {
   font-size: 1.1em;
   color: #4b5563;
   margin-bottom: 30px;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
 }
 .start-btn {
   font-size: 1.2em;
   padding: 12px 25px;
-}
-.submit-btn {
-  margin-top: 30px;
-  width: 100%;
-}
-audio {
-  width: 100%;
-  margin-bottom: 20px;
 }
 </style>

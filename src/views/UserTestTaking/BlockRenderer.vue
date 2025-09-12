@@ -1,102 +1,96 @@
+<!-- src/views/UserTestTaking/BlockRenderer.vue -->
 <template>
-  <div class="block-display-container">
-    <!-- INSTRUCTION Block -->
-    <div v-if="block.type === 'INSTRUCTION'" class="instruction-block">
-      {{ block.text }}
-    </div>
+  <div class="block-display-container" :id="block.id">
+    <!-- INSTRUCTION -->
+    <div
+      v-if="block.type === 'INSTRUCTION'"
+      class="instruction-block"
+      v-html="block.text"
+    ></div>
 
-    <!-- GAP_FILLING Block -->
-    <div v-else-if="block.type === 'GAP_FILLING'" class="gap-filling-block">
-      <!-- This component should emit its answers in the correct object format -->
-      <GappFilling
+    <!-- GAP_FILLING -->
+    <div v-else-if="block.type === 'GAP_FILLING'">
+      <!-- Assuming you have a GapFilling component that emits `answer-update` -->
+      <GapFilling
         :template-string="block.text"
-        @answer-update="$emit('answer-update', $event)"
+        @answer-update="emitAnswerUpdate"
       />
     </div>
 
-    <!-- MULTIPLE_CHOICE Block -->
-    <div
-      v-else-if="block.type === 'MULTIPLE_CHOICE'"
-      class="multiple-choice-block"
-    >
-      <p class="question-text">{{ block.text }}</p>
+    <!-- MULTIPLE_CHOICE -->
+    <div v-else-if="block.type === 'MULTIPLE_CHOICE'" class="question-block">
+      <p class="question-text" v-html="block.text"></p>
       <div class="options-container">
-        <div v-for="option in block.options" :key="option" class="option">
+        <label v-for="option in block.options" :key="option" class="option">
           <input
             v-if="!block.allowMultiple"
             type="radio"
-            :id="`mc_q_${block.id}_${option}`"
-            :name="`mc_q_${block.id}`"
+            :name="block.id"
             :value="option"
             @change="updateAnswer(block.id, option)"
           />
-
-          <!-- MULTIPLE ANSWERS (CHECKBOX) -->
           <input
             v-else
             type="checkbox"
-            :id="`mc_q_${block.id}_${option}`"
             :value="option"
             @change="
               updateMultipleAnswers(block.id, option, $event.target.checked)
             "
           />
-          <label :for="`mc_q_${block.id}_${option}`">{{ option }}</label>
-        </div>
+          <span>{{ option }}</span>
+        </label>
       </div>
     </div>
 
-    <!-- MATCHING Block -->
-    <div v-else-if="block.type === 'MATCHING'" class="matching-block">
-      <p class="instruction-text">{{ block.instruction }}</p>
+    <!-- MATCHING -->
+    <div v-else-if="block.type === 'MATCHING'" class="question-block">
+      <p class="instruction-text" v-html="block.instruction"></p>
       <div class="matching-grid">
         <div class="options-list-column">
           <h4>Options</h4>
-          <ul>
-            <li v-for="option in block.options" :key="option">{{ option }}</li>
-          </ul>
+          <div
+            class="options-box"
+            v-html="formatOptionsList(block.options)"
+          ></div>
         </div>
         <div class="items-to-match-column">
           <h4>Questions</h4>
           <div
             v-for="item in block.itemsToMatch"
             :key="item.id"
+            :id="item.id"
             class="item-to-match"
           >
-            <label :for="`match_q_${item.id}`">{{ item.text }}</label>
+            <label :for="`match_q_${item.id}`" v-html="item.text"></label>
             <input
               type="text"
-              class="answer-input-field"
               :id="`match_q_${item.id}`"
-              :name="`match_q_${item.id}`"
-              @input="updateAnswer(item.id, $event.target.value)"
+              @input="updateAnswer(item.id, $event.target.value.trim())"
             />
           </div>
         </div>
       </div>
     </div>
 
-    <!-- IMAGE Block -->
+    <!-- IMAGE -->
     <div v-else-if="block.type === 'IMAGE'" class="image-block">
-      <img
-        :src="block.imageUrl"
-        :alt="block.caption || 'Image'"
-        class="display-image"
-      />
-      <p v-if="block.caption" class="caption">{{ block.caption }}</p>
+      <img :src="block.imageUrl" :alt="block.caption || 'Test Image'" />
+      <p v-if="block.caption" class="caption" v-html="block.caption"></p>
     </div>
 
-    <!-- TRUE_FALSE_NOT_GIVEN Block -->
-    <div v-else-if="block.type === 'TRUE_FALSE_NOT_GIVEN'" class="tfng-block">
-      <p class="instruction-text">{{ block.instruction }}</p>
+    <!-- TRUE_FALSE_NOT_GIVEN -->
+    <div
+      v-else-if="block.type === 'TRUE_FALSE_NOT_GIVEN'"
+      class="question-block"
+    >
+      <p class="instruction-text" v-html="block.instruction"></p>
       <div
-        v-for="(statement, index) in block.statements"
+        v-for="statement in block.statements"
         :key="statement.id"
+        :id="statement.id"
         class="statement-item"
       >
-        <p class="statement-text">
-          <strong>{{ index + 1 }}.</strong> {{ statement.text }}
-        </p>
+        <p class="statement-text" v-html="statement.text"></p>
         <select
           class="answer-select"
           @change="updateAnswer(statement.id, $event.target.value)"
@@ -109,264 +103,232 @@
       </div>
     </div>
 
-    <!-- MAP_LABELING Block -->
-    <div v-else-if="block.type === 'MAP_LABELING'" class="map-labeling-block">
-      <p class="instruction-text">{{ block.instruction }}</p>
-      <div class="map-content">
-        <img
-          :src="block.imageUrl"
-          alt="Map/Diagram"
-          class="display-map-image"
-        />
-        <div class="map-labels">
+    <div v-else-if="block.type === 'MAP_LABELING'" class="question-block">
+      <p class="instruction-text" v-html="block.instruction"></p>
+      <div class="map-labeling-grid">
+        <div class="map-image-container">
+          <img
+            v-if="block.imageUrl"
+            :src="block.imageUrl"
+            alt="Map or Diagram"
+            class="display-image"
+          />
+        </div>
+        <div class="labels-container">
+          <div class="options-box" v-if="block.options && block.options.length">
+            <strong>Word Bank:</strong>
+            <p>{{ block.options.join(", ") }}</p>
+          </div>
+          <h4>Labels to identify:</h4>
           <div
-            v-for="(label, index) in block.labels"
+            v-for="label in block.labels"
             :key="label.id"
-            class="label-item"
+            :id="label.id"
+            class="item-to-match"
           >
-            <label :for="`map_q_${label.id}`"
-              >{{ index + 1 }}. {{ label.text }}</label
-            >
+            <label :for="`map_q_${label.id}`" v-html="label.text"></label>
             <input
               type="text"
               :id="`map_q_${label.id}`"
-              :name="`map_q_${label.id}`"
-              @input="updateAnswer(label.id, $event.target.value)"
+              @input="updateAnswer(label.id, $event.target.value.trim())"
             />
           </div>
         </div>
       </div>
     </div>
 
-    <!-- WRITING_PROMPT Block -->
+    <!-- SUMMARY_COMPLETION -->
+    <div v-else-if="block.type === 'SUMMARY_COMPLETION'" class="question-block">
+      <p class="instruction-text" v-html="block.instruction"></p>
+      <div
+        v-if="block.options && block.options.length"
+        class="options-box word-bank"
+      >
+        {{ block.options.join(" | ") }}
+      </div>
+      <div class="summary-text">
+        <!-- This assumes a GapFilling component can handle the summary text -->
+        <GapFilling
+          :template-string="block.text"
+          @answer-update="emitAnswerUpdate"
+        />
+      </div>
+    </div>
+
+    <!-- WRITING_PROMPT (Display Only) -->
     <div
       v-else-if="block.type === 'WRITING_PROMPT'"
       class="writing-prompt-block"
     >
-      <!-- Task 1 Container -->
       <div class="task-container" v-if="block.task1_prompt">
         <h4>Writing Task 1</h4>
-        <p class="prompt-text">{{ block.task1_prompt }}</p>
+        <p class="prompt-text" v-html="block.task1_prompt"></p>
         <img
           v-if="block.task1_imageUrl"
           :src="block.task1_imageUrl"
-          alt="Writing Task 1 Image"
+          alt="Task 1 Image"
           class="display-image"
         />
-        <!-- ========================================================== -->
-        <!-- THE FIX: Only show textareas if NOT in display-only mode   -->
-        <!-- ========================================================== -->
-        <template v-if="!isDisplayOnly">
-          <textarea
-            class="writing-textarea"
-            placeholder="Type your response for Task 1 here..."
-            :value="userAnswers.task1"
-            @input="updateWritingAnswer('task1', $event.target.value)"
-          ></textarea>
-        </template>
       </div>
-
-      <!-- Task 2 Container -->
       <div class="task-container" v-if="block.task2_prompt">
         <h4>Writing Task 2</h4>
-        <p class="prompt-text">{{ block.task2_prompt }}</p>
-        <template v-if="!isDisplayOnly">
-          <textarea
-            class="writing-textarea"
-            placeholder="Type your response for Task 2 here..."
-            :value="userAnswers.task2"
-            @input="updateWritingAnswer('task2', $event.target.value)"
-          ></textarea>
-        </template>
+        <p class="prompt-text" v-html="block.task2_prompt"></p>
       </div>
     </div>
   </div>
 </template>
 
-// In: BlockRenderer.vue
+<script setup>
+import GapFilling from "../UserTestTaking/GappFilling.vue";
 
-<script>
-import GappFilling from "./GappFilling.vue";
+// eslint-disable-next-line no-undef
+const props = defineProps({
+  block: { type: Object, required: true },
+  userAnswers: { type: Object, default: () => ({}) },
+  isDisplayOnly: { type: Boolean, default: false }, // Crucial for the Writing section
+});
 
-export default {
-  name: "BlockRenderer",
-  components: { GappFilling },
-  props: {
-    block: { type: Object, required: true },
-    userAnswers: {
-      type: Object,
-      default: () => ({}),
-    },
-    isDisplayOnly: {
-      type: Boolean,
-      default: false,
-    },
-  },
-  emits: ["answer-update"],
-  methods: {
-    // Universal method for single-value inputs
-    updateAnswer(questionId, answer) {
-      const payload = { [questionId]: answer };
-      console.log(
-        `%c[BlockRenderer] Emitting single answer:`,
-        "color: blue;",
-        payload
-      );
-      this.$emit("answer-update", payload);
-    },
+// eslint-disable-next-line no-undef
+const emit = defineEmits(["answer-update"]);
 
-    // Special method for multiple-answer checkboxes
-    updateMultipleAnswers(questionId, option, isChecked) {
-      if (!this.userAnswers) return;
+// Universal emitter for GapFilling component
+const emitAnswerUpdate = (payload) => {
+  emit("answer-update", payload);
+};
 
-      const currentAnswers = this.userAnswers[questionId] || [];
-      let newAnswers;
+const updateAnswer = (questionId, answer) => {
+  emit("answer-update", { [questionId]: answer });
+};
 
-      if (isChecked) {
-        newAnswers = [...currentAnswers, option];
-      } else {
-        newAnswers = currentAnswers.filter((ans) => ans !== option);
-      }
+const updateMultipleAnswers = (questionId, option, isChecked) => {
+  const currentAnswers = props.userAnswers[questionId] || [];
+  let newAnswers;
+  if (isChecked) {
+    newAnswers = [...new Set([...currentAnswers, option])];
+  } else {
+    newAnswers = currentAnswers.filter((ans) => ans !== option);
+  }
+  emit("answer-update", { [questionId]: newAnswers });
+};
 
-      const payload = { [questionId]: newAnswers };
-      console.log(
-        `%c[BlockRenderer] Emitting multiple answers:`,
-        "color: blue;",
-        payload
-      );
-      this.$emit("answer-update", payload);
-    },
-
-    // Special method for Writing section
-    updateWritingAnswer(taskType, answer) {
-      const payload = { questionId: taskType, answer: answer };
-      console.log(
-        `%c[BlockRenderer] Emitting writing answer:`,
-        "color: blue;",
-        payload
-      );
-      this.$emit("answer-update", payload);
-    },
-  },
+const formatOptionsList = (options) => {
+  if (!options) return "";
+  return "<ul>" + options.map((opt) => `<li>${opt}</li>`).join("") + "</ul>";
 };
 </script>
+
 <style scoped>
 .block-display-container {
-  padding: 15px;
-  border-bottom: 1px solid #eee;
+  padding: 15px 0;
+  border-bottom: 1px solid #e9ecef;
   margin-bottom: 20px;
 }
 .instruction-block {
   font-size: 1.1em;
   font-weight: bold;
   font-style: italic;
+  background-color: #f8f9fa;
+  padding: 15px;
+  border-radius: 5px;
+  line-height: 1.6;
+}
+.question-block {
+  margin-top: 20px;
+}
+.question-text,
+.statement-text,
+.instruction-text,
+.prompt-text {
+  font-size: 1rem;
   margin-bottom: 15px;
-}
-.answer-input-field {
-  width: 100%;
-}
-.answer-select {
-  padding: 8px;
-  border-radius: 4px;
-  border: 1px solid #ccc;
-  background-color: white;
-}
-.multiple-choice-block .question-text,
-.tfng-block .statement-text {
-  font-size: 1.05em;
-  margin-bottom: 10px;
+  line-height: 1.7;
 }
 .options-container {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.options-container .option {
+.option {
   display: flex;
   align-items: center;
-  gap: 10px;
-}
-input[type="radio"] {
-  width: 1.2em;
-  height: 1.2em;
-  margin: 0;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 5px;
+  border: 1px solid #dee2e6;
   cursor: pointer;
+  transition: background-color 0.2s;
 }
-input[type="text"] {
-  padding: 8px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+.option:hover {
+  background-color: #f1f3f5;
 }
-.matching-block,
-.map-labeling-block {
-  margin-top: 20px;
+.option input {
+  cursor: pointer;
+  transform: scale(1.2);
 }
-.matching-grid,
-.map-content {
+.statement-item {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr auto;
+  align-items: center;
   gap: 20px;
+  padding: 12px 0;
+  border-top: 1px solid #f1f3f5;
 }
-.matching-grid .options-list-column ul {
-  list-style-type: upper-alpha;
+.matching-grid {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 30px;
+}
+.options-box {
+  background-color: #f8f9fa;
+  padding: 5px 15px;
+  border-radius: 5px;
+  border: 1px solid #e9ecef;
+}
+.options-box ul {
   padding-left: 20px;
+  margin: 10px 0;
 }
-.matching-grid .item-to-match label {
-  display: block;
-  margin-bottom: 5px;
+.item-to-match {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 15px;
 }
-.matching-grid .item-to-match input {
-  width: 100%;
+.item-to-match label {
+  margin-bottom: 8px;
 }
-.image-block .display-image,
-.writing-prompt-block .display-image {
+.item-to-match input,
+.answer-select {
+  padding: 10px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+.word-bank {
+  font-style: italic;
+  color: #495057;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+.summary-text {
+  line-height: 2;
+}
+.image-block img,
+.writing-prompt-block img {
   max-width: 100%;
-  height: auto;
-  border: 1px solid #ddd;
+  border-radius: 5px;
+  border: 1px solid #dee2e6;
   margin: 15px 0;
 }
 .image-block .caption {
-  text-align: center;
   font-style: italic;
-  color: #666;
-  font-size: 0.9em;
+  color: #6c757d;
+  text-align: center;
+  margin-top: -5px;
 }
 .writing-prompt-block h4 {
-  margin-top: 20px;
+  margin-top: 25px;
   margin-bottom: 10px;
-  color: #333;
-}
-.writing-prompt-block .prompt-text {
-  line-height: 1.6;
-  margin-bottom: 15px;
-}
-.writing-prompt-block .writing-textarea {
-  width: 100%;
-  min-height: 200px;
-  padding: 10px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  box-sizing: border-box;
-  resize: vertical;
-}
-.tfng-options {
-  flex-direction: row;
-  gap: 20px;
-  margin-top: 10px;
-}
-.map-labeling-block .display-map-image {
-  max-width: 100%;
-  height: auto;
-  border: 1px solid #ddd;
-  margin: 10px 0;
-}
-.map-labels .label-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-.map-labels .label-item input {
-  flex-grow: 1;
+  border-bottom: 1px solid #e9ecef;
+  padding-bottom: 10px;
 }
 </style>

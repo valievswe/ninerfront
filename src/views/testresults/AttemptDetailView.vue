@@ -123,6 +123,7 @@ export default {
     };
   },
   computed: {
+    // ... sortedSections, total counters, and writing getters are all correct and unchanged ...
     sortedSections() {
       if (!this.attempt) return [];
       const order = ["LISTENING", "READING", "WRITING"];
@@ -131,71 +132,29 @@ export default {
       );
     },
     totalListeningQuestions() {
-      if (!this.attempt) return 0;
-      const listeningSection =
-        this.attempt.scheduledTest.testTemplate.sections.find(
-          (s) => s.type === "LISTENING"
-        );
-      if (!listeningSection?.content.blocks) return 0;
-      return listeningSection.content.blocks.reduce((total, block) => {
-        if (block.type === "GAP_FILLING") {
-          return total + ((block.text || "").match(/\{\{/g) || []).length;
-        }
-        if (block.type === "MULTIPLE_CHOICE") {
-          return total + 1;
-        }
-        if (block.type === "MATCHING") {
-          return total + (block.itemsToMatch?.length || 0);
-        }
-        if (block.type === "TRUE_FALSE_NOT_GIVEN") {
-          return total + (block.statements?.length || 0);
-        }
-        if (block.type === "MAP_LABELING") {
-          return total + (block.labels?.length || 0);
-        }
-        return total;
-      }, 0);
+      const listeningSection = this.sortedSections.find(
+        (s) => s.type === "LISTENING"
+      );
+      return listeningSection
+        ? Object.keys(listeningSection.answers || {}).length
+        : 0;
     },
     totalReadingQuestions() {
-      if (!this.attempt) return 0;
-      const readingSection =
-        this.attempt.scheduledTest.testTemplate.sections.find(
-          (s) => s.type === "READING"
-        );
-      if (!readingSection?.content.blocks) return 0;
-      return readingSection.content.blocks.reduce((total, block) => {
-        if (block.type === "GAP_FILLING") {
-          return total + ((block.text || "").match(/\{\{/g) || []).length;
-        }
-        if (block.type === "MULTIPLE_CHOICE") {
-          return total + 1;
-        }
-        if (block.type === "MATCHING") {
-          return total + (block.itemsToMatch?.length || 0);
-        }
-        if (block.type === "TRUE_FALSE_NOT_GIVEN") {
-          return total + (block.statements?.length || 0);
-        }
-        if (block.type === "SUMMARY_COMPLETION") {
-          return (
-            total + ((block.summaryText || "").match(/\{\{/g) || []).length
-          );
-        }
-        return total;
-      }, 0);
+      const readingSection = this.sortedSections.find(
+        (s) => s.type === "READING"
+      );
+      return readingSection
+        ? Object.keys(readingSection.answers || {}).length
+        : 0;
     },
     writingResponseTask1() {
-      if (!this.attempt || !this.attempt.userAnswers?.WRITING?.task1) {
-        return "<em>(No answer provided for Task 1)</em>";
-      }
-      const answer = this.attempt.userAnswers.WRITING.task1;
+      const answer = this.attempt?.userAnswers?.WRITING?.task1;
+      if (!answer) return "<em>(No answer provided)</em>";
       return String(answer).replace(/\n/g, "<br />");
     },
     writingResponseTask2() {
-      if (!this.attempt || !this.attempt.userAnswers?.WRITING?.task2) {
-        return "<em>(No answer provided for Task 2)</em>";
-      }
-      const answer = this.attempt.userAnswers.WRITING.task2;
+      const answer = this.attempt?.userAnswers?.WRITING?.task2;
+      if (!answer) return "<em>(No answer provided)</em>";
       return String(answer).replace(/\n/g, "<br />");
     },
   },
@@ -212,13 +171,7 @@ export default {
       }
     },
     isQuestionBlock(type) {
-      return [
-        "GAP_FILLING",
-        "MULTIPLE_CHOICE",
-        "MATCHING",
-        "TRUE_FALSE_NOT_GIVEN",
-        "MAP_LABELING",
-      ].includes(type);
+      return !["INSTRUCTION", "IMAGE", "WRITING_PROMPT"].includes(type);
     },
     formatAnswerForDisplay(answer) {
       if (answer === undefined || answer === null || answer === "") {
@@ -228,27 +181,52 @@ export default {
         if (answer.length === 0) return "<em>(No Answer)</em>";
         return answer.join(", ");
       }
-      return answer;
+      return String(answer);
     },
+
+    // ====================================================================
+    //  THE NEW, CORRECT getQuestionsFromBlock METHOD
+    // ====================================================================
     getQuestionsFromBlock(block) {
-      if (block.type === "GAP_FILLING") {
-        const placeholders =
-          (block.text || "").match(/\{\{([a-zA-Z0-9]+)\}\}/g) || [];
+      const section = this.sortedSections.find((s) =>
+        s.content.blocks.some((b) => b.id === block.id)
+      );
+      if (!section || !section.answers) return [];
 
-        return placeholders.map((p, index) => ({
-          id: p.replace(/\{|\}/g, ""),
+      // Get all question IDs from the correct answers for this section
+      const questionIds = Object.keys(section.answers);
 
-          key: `${block.id}_${index}`,
-          text: block.text,
-        }));
-      }
-      if (block.type === "MULTIPLE_CHOICE")
-        return [{ id: block.id, text: block.text }];
-      if (block.type === "MATCHING") return block.itemsToMatch;
-      if (block.type === "TRUE_FALSE_NOT_GIVEN") return block.statements;
-      if (block.type === "MAP_LABELING") return block.labels;
-      return [];
+      // Now, find the text associated with each ID within the block
+      const questions = questionIds
+        .map((id) => {
+          // This is a helper to find the text for a given ID within the block's structure
+          const findText = (obj) => {
+            if (!obj || typeof obj !== "object") return null;
+            if (obj.id === id && obj.text) return obj.text; // For Matching, T/F/NG items
+            if (block.type === "MULTIPLE_CHOICE" && block.id === id)
+              return block.text; // For MCQs
+            // For GapFilling, the question text is the entire block text
+            if (
+              ["GAP_FILLING", "SUMMARY_COMPLETION"].includes(block.type) &&
+              block.answers[id]
+            )
+              return block.text;
+
+            for (const key in obj) {
+              const found = findText(obj[key]);
+              if (found) return found;
+            }
+            return null;
+          };
+          const text = findText(block);
+          // Only return questions that actually belong to this block
+          return text ? { id, text } : null;
+        })
+        .filter(Boolean); // Filter out any nulls
+
+      return questions;
     },
+
     getUserAnswer(sectionType, questionId) {
       return this.attempt?.userAnswers?.[sectionType]?.[questionId];
     },
@@ -259,16 +237,13 @@ export default {
           (s) => s.type === sectionType
         )?.answers?.[questionId];
 
-      const formatForCompare = (ans) => {
-        if (ans === undefined || ans === null) return "undefined";
-        if (Array.isArray(ans)) {
-          if (ans.length === 0) return "empty_array";
-          return [...ans].sort().join(",");
-        }
-        return String(ans);
+      const format = (ans) => {
+        if (ans === undefined || ans === null) return "null";
+        if (Array.isArray(ans)) return [...ans].sort().join(",").toLowerCase();
+        return String(ans).trim().toLowerCase();
       };
 
-      if (formatForCompare(userAnswer) === formatForCompare(correctAnswer)) {
+      if (format(userAnswer) === format(correctAnswer)) {
         return "correct";
       }
       return "incorrect";

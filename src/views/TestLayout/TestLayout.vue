@@ -1,4 +1,3 @@
-<!-- src/views/TestLayout/TestLayout.vue -->
 <template>
   <div class="test-container">
     <header class="test-header">
@@ -35,39 +34,83 @@
         </button>
       </div>
       <div class="footer-controls">
-        <button class="btn-secondary">Help</button>
+        <button class="btn-secondary" @click="showHelpModal">Help</button>
         <button class="btn-primary" @click="goToNextSection()">
           Continue to Next Section
         </button>
       </div>
     </footer>
+
+    <!-- Help Modal Overlay -->
+    <div
+      v-if="isHelpModalVisible"
+      class="modal-overlay"
+      @click="closeHelpModal"
+    >
+      <div class="modal-content" @click.stop>
+        <h2>Test Interface Help</h2>
+        <p>This guide explains how to navigate and use the test interface.</p>
+        <ul>
+          <li>
+            <strong>Timer:</strong> Shows remaining time. The test auto-submits
+            when time runs out.
+          </li>
+          <li>
+            <strong>Question Palette:</strong> Navigate to any question.
+            Answered questions are marked.
+          </li>
+          <li>
+            <strong>Continue:</strong> Saves your answers and moves to the next
+            section.
+          </li>
+        </ul>
+        <button class="btn-primary" @click="closeHelpModal">Close Help</button>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, provide, computed, watch, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import api from "../../services/api"; // Ensure this path is correct
+import api from "../../services/api";
 
 const route = useRoute();
 const router = useRouter();
 
-// --- STATE SHARED WITH CHILD COMPONENTS ---
+// =================================================================
+//  CENTRALIZED ANSWER STORE
+// =================================================================
+const allUserAnswers = ref({
+  LISTENING: {},
+  READING: {},
+  WRITING: { task1: "", task2: "" }, // Pre-initialize writing object
+});
+
+// Provide this entire reactive object to all children
+provide("allUserAnswers", allUserAnswers);
+
+// --- STATE SHARED WITH CHILD COMPONENTS (for UI control) ---
 const sharedState = ref({
   sectionTitle: "",
   timeLeft: 0,
   questions: [],
   currentQuestionInView: null,
-  startTimer: () => {}, // Placeholder
-  // eslint-disable-next-line no-unused-vars
-  scrollToQuestion: (questionId) => {}, // Placeholder
+  startTimer: () => {},
+  scrollToQuestion: () => {},
 });
-
 provide("testState", sharedState);
 
-// --- TIMER LOGIC ---
+// --- LOCAL STATE & HELP MODAL ---
+const isHelpModalVisible = ref(false);
 let timerId = null;
-
+const showHelpModal = () => {
+  isHelpModalVisible.value = true;
+};
+const closeHelpModal = () => {
+  isHelpModalVisible.value = false;
+};
+// --- TIMER LOGIC ---
 const formattedTimeLeft = computed(() => {
   const timeLeft = sharedState.value.timeLeft;
   if (timeLeft <= 0) return "00:00";
@@ -78,12 +121,9 @@ const formattedTimeLeft = computed(() => {
     .padStart(2, "0")}`;
 });
 
-// This function can be called by child components to start the countdown
 const startTimer = (durationInSeconds) => {
-  if (timerId) clearInterval(timerId); // Clear any old timer just in case
-
-  sharedState.value.timeLeft = durationInSeconds; // Set the initial time
-
+  if (timerId) clearInterval(timerId);
+  sharedState.value.timeLeft = durationInSeconds;
   timerId = setInterval(() => {
     if (sharedState.value.timeLeft > 0) {
       sharedState.value.timeLeft--;
@@ -95,8 +135,7 @@ const startTimer = (durationInSeconds) => {
   }, 1000);
 };
 
-// --- NAVIGATION AND SUBMISSION LOGIC ---
-
+// --- NAVIGATION AND SUBMISSION LOGIC (CORRECTED) ---
 const handleQuestionNav = (questionId) => {
   sharedState.value.scrollToQuestion(questionId);
 };
@@ -107,7 +146,7 @@ const finishTest = async () => {
     alert("Congratulations! You have completed the test.");
     router.push("/dashboard");
   } catch (err) {
-    alert("There was an error submitting your test.");
+    alert("There was an error finalizing your test.");
     console.error(err);
   }
 };
@@ -118,9 +157,24 @@ const goToNextSection = (isAutoAdvance = false) => {
   const currentIndex = sectionOrder.indexOf(currentSectionName);
 
   const proceed = (nextAction) => {
-    console.log(`Submitting answers for ${currentSectionName}...`);
-    // NOTE: You should add your api.submitSectionAnswers(...) call here
-    nextAction();
+    const sectionType = currentSectionName.toUpperCase();
+    // Get answers directly from our centralized, reliable store
+    const answersToSubmit = allUserAnswers.value[sectionType];
+
+    api
+      .submitSectionAnswers(
+        route.params.attemptId,
+        sectionType,
+        answersToSubmit
+      )
+      .then(() => {
+        console.log(`Successfully submitted answers for ${sectionType}`);
+        nextAction();
+      })
+      .catch((err) => {
+        console.error(`Failed to submit answers for ${sectionType}`, err);
+        alert("Could not save your progress. Please check your connection.");
+      });
   };
 
   if (currentIndex < sectionOrder.length - 1) {
@@ -128,51 +182,48 @@ const goToNextSection = (isAutoAdvance = false) => {
     if (
       isAutoAdvance ||
       confirm(
-        `Are you sure you want to submit the ${currentSectionName} section and continue to ${nextSectionName}?`
+        `Submit ${currentSectionName} and continue to ${nextSectionName}?`
       )
     ) {
       proceed(() => router.push({ name: `${nextSectionName}Section` }));
     }
   } else {
+    // This is the final section (Writing)
     if (
       isAutoAdvance ||
       confirm("Are you sure you want to finish and submit your entire test?")
     ) {
+      // We still call 'proceed' to save the final section's answers.
+      // The 'nextAction' we give it is the 'finishTest' function.
       proceed(() => finishTest());
     }
   }
 };
 
-// --- ROUTE CHANGE WATCHER to reset state ---
-
+// --- ROUTE CHANGE WATCHER & CLEANUP ---
 watch(
   () => route.path,
   () => {
-    if (timerId) clearInterval(timerId); // Stop the timer when navigating away
-
+    if (timerId) clearInterval(timerId);
     sharedState.value = {
       sectionTitle: "",
       timeLeft: 0,
       questions: [],
       currentQuestionInView: null,
-      startTimer: startTimer, // Provide the startTimer function to the new section
-      // eslint-disable-next-line no-unused-vars
-      scrollToQuestion: (questionId) => {},
+      startTimer: startTimer,
+      scrollToQuestion: () => {},
+      // No longer need provideAnswers here
     };
   },
   { immediate: true }
 );
 
-// Cleanup timer on component unmount (e.g., user navigates away from the test completely)
 onUnmounted(() => {
-  if (timerId) {
-    clearInterval(timerId);
-  }
+  if (timerId) clearInterval(timerId);
 });
 </script>
-
 <style scoped>
-/* Your styles are unchanged and correct */
+/* Your existing styles are correct */
 .test-container {
   display: flex;
   flex-direction: column;
@@ -265,5 +316,43 @@ onUnmounted(() => {
 }
 .footer-controls button {
   margin-left: 10px;
+}
+
+/* Help Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+.modal-content {
+  background-color: white;
+  padding: 30px 40px;
+  border-radius: 8px;
+  max-width: 600px;
+  width: 90%;
+}
+.modal-content h2 {
+  margin-top: 0;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 15px;
+}
+.modal-content ul {
+  list-style-type: none;
+  padding: 0;
+}
+.modal-content li {
+  margin-bottom: 15px;
+  line-height: 1.6;
+}
+.modal-content button {
+  margin-top: 20px;
+  width: 100%;
 }
 </style>
